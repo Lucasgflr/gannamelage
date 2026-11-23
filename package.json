@@ -5,12 +5,13 @@
         "build": "vite build",
         "dev": "vite",
         "typecheck": "tsc --noEmit",
-        "lint": "eslint resources/js demo tests/e2e tests/demo playwright.config.ts playwright.demo.config.ts vite.demo.config.ts",
+        "lint": "eslint resources/js demo tests/e2e tests/demo tests/unit playwright.config.ts playwright.demo.config.ts vite.demo.config.ts",
         "test:e2e": "playwright test",
         "dev:demo": "vite --config vite.demo.config.ts",
         "build:demo": "vite build --config vite.demo.config.ts",
         "preview:demo": "vite preview --config vite.demo.config.ts",
-        "test:demo": "playwright test --config playwright.demo.config.ts"
+        "test:demo": "playwright test --config playwright.demo.config.ts",
+        "test:unit": "node --experimental-strip-types --test tests/unit/*.test.ts"
     },
     "devDependencies": {
         "@eslint/js": "^9.39.5",

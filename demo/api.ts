@@ -2,6 +2,25 @@ import axios, { AxiosError, type AxiosResponse, type InternalAxiosRequestConfig 
 import { blankProperty, illustrativePhoto, sampleProperties } from './fixtures';
 import type { Photo, Property, PropertyPage } from '../resources/js/types/property';
 
+import { cleanLocation, locationKey } from '../resources/js/utils/location';
+
+function locationOptions(properties: Property[]) {
+    const cities = new Map<string, { name: string; neighborhoods: Map<string, string> }>();
+    for (const property of properties) {
+        const name = cleanLocation(property.address_city);
+        if (!name) continue;
+        const key = locationKey(name);
+        const city = cities.get(key) ?? { name, neighborhoods: new Map<string, string>() };
+        const neighborhood = cleanLocation(property.address_neighborhood);
+        const neighborhoodKey = locationKey(neighborhood);
+        if (neighborhood && !city.neighborhoods.has(neighborhoodKey)) city.neighborhoods.set(neighborhoodKey, neighborhood);
+        cities.set(key, city);
+    }
+    const compare = (a: string, b: string) => a.localeCompare(b, 'pt-BR');
+    return { cities: [...cities.values()].sort((a, b) => compare(a.name, b.name))
+        .map(city => ({ name: city.name, neighborhoods: [...city.neighborhoods.values()].sort(compare) })) };
+}
+
 const storageKey = 'gannamelage-demo:v1:properties';
 
 interface Inventory {
@@ -48,7 +67,11 @@ function list(properties: Property[], params: Record<string, string>): PropertyP
             property.title, property.description, property.address_city, property.address_neighborhood, property.slug,
         ].some(value => value && normalize(value).includes(search)))) return false;
         for (const field of ['address_city', 'address_neighborhood'] as const) {
-            if (params[field] && !normalize(property[field] ?? '').includes(normalize(params[field]))) return false;
+            if (!params[field]) continue;
+            const matches = params.location_exact === '1'
+                ? locationKey(property[field]) === locationKey(params[field])
+                : normalize(property[field] ?? '').includes(normalize(params[field]));
+            if (!matches) return false;
         }
         for (const field of minimums) {
             if (params[field] && (property[field] === null || Number(property[field]) < Number(params[field]))) return false;
@@ -112,6 +135,7 @@ export const api = axios.create({
             if (!property) throw notFound();
             return respond({ ...property, owner: undefined });
         }
+        if (url === '/api/properties/filter-options' && method === 'get') return respond(locationOptions(rows));
         if (url === '/api/properties') {
             if (method === 'get') return respond(list(rows, config.params ?? {}));
             if (method === 'post') return save(patchProperty(blankProperty(nextId), config), 201);

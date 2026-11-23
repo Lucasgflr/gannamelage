@@ -10,6 +10,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
 
+    Route::get('properties/filter-options', [PropertyController::class, 'filterOptions']);
     Route::apiResource('properties', PropertyController::class);
     Route::post('properties/{property}/photos', [PropertyController::class, 'uploadPhotos']);
     Route::post('properties/{property}/duplicate', [PropertyController::class, 'duplicate']);

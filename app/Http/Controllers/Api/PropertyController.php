@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Property;
+use App\Support\PropertyLocations;
 use App\Models\PropertyPhoto;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -24,6 +25,11 @@ use Illuminate\Support\Str;
  */
 class PropertyController extends Controller
 {
+    public function filterOptions()
+    {
+        return response()->json(['cities' => PropertyLocations::options()]);
+    }
+
     /**
      * Lista os imóveis do painel, com filtros e busca em texto livre.
      *
@@ -72,6 +78,7 @@ class PropertyController extends Controller
             'search' => 'nullable|string|max:255',
             'status' => 'nullable|in:draft,available,reserved,sold',
             'property_type' => 'nullable|string|max:255',
+            'location_exact' => 'sometimes|boolean',
             'address_city' => 'nullable|string|max:255',
             'address_neighborhood' => 'nullable|string|max:255',
             'page' => 'nullable|integer|min:1|max:1000000',
@@ -108,9 +115,22 @@ class PropertyController extends Controller
                 }
             }
         }
-        foreach (['address_city', 'address_neighborhood'] as $column) {
-            if (isset($filters[$column])) {
-                $query->where($column, 'like', '%'.$filters[$column].'%');
+        if ($request->boolean('location_exact') && isset($filters['address_city'])) {
+            $city = PropertyLocations::key($filters['address_city']);
+            $neighborhood = isset($filters['address_neighborhood'])
+                ? PropertyLocations::key($filters['address_neighborhood']) : null;
+            $locations = PropertyLocations::rows()->filter(fn ($row) =>
+                PropertyLocations::key($row->address_city) === $city
+                && ($neighborhood === null || PropertyLocations::key($row->address_neighborhood) === $neighborhood));
+            $query->whereIn('address_city', $locations->pluck('address_city')->unique()->values());
+            if ($neighborhood !== null) {
+                $query->whereIn('address_neighborhood', $locations->pluck('address_neighborhood')->unique()->values());
+            }
+        } else {
+            foreach (['address_city', 'address_neighborhood'] as $column) {
+                if (isset($filters[$column])) {
+                    $query->where($column, 'like', '%'.$filters[$column].'%');
+                }
             }
         }
 

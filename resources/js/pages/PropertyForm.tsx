@@ -7,6 +7,8 @@ import { publicUrl } from '../services/share';
 import { coverPhoto, money, photoUrl, propertyTypes, statuses, type Photo, type Property } from '../types/property';
 import ShareButton from '../components/ShareButton';
 import Sheet from '../components/Sheet';
+import PriceThousandsField from '../components/PriceThousandsField';
+import { parsePriceThousands, reaisToThousands } from '../utils/price';
 
 const tabs = ['Imóvel', 'Proprietário', 'Fotos', 'Link'] as const;
 const address = [
@@ -15,7 +17,7 @@ const address = [
     ['address_city', 'Cidade', 255], ['address_state', 'UF', 2], ['address_zip', 'CEP', 10],
 ] as const;
 const numbers = [
-    ['sale_price', 'Valor de venda', '0.01'], ['condo_price', 'Condomínio', '0.01'],
+    ['condo_price', 'Condomínio', '0.01'],
     ['iptu', 'IPTU anual', '0.01'], ['land_area', 'Área do terreno (m²)', '0.01'],
     ['built_area', 'Área construída (m²)', '0.01'], ['bedrooms', 'Quartos', '1'],
     ['suites', 'Suítes', '1'], ['bathrooms', 'Banheiros', '1'], ['garage_spots', 'Vagas', '1'],
@@ -30,7 +32,8 @@ function Editor({ property }: { property?: Property }) {
     const [tab, setTab] = useState<(typeof tabs)[number]>('Imóvel');
     const [title, setTitle] = useState(property?.title ?? '');
     const [type, setType] = useState(property?.property_type ?? 'casa');
-    const [price, setPrice] = useState(String(property?.sale_price ?? ''));
+    const [price, setPrice] = useState(reaisToThousands(property?.sale_price));
+    const salePrice = parsePriceThousands(price);
     const [photos, setPhotos] = useState(property?.photos ?? []);
     const [main, setMain] = useState<LocalPhoto>();
     const [gallery, setGallery] = useState<LocalPhoto[]>([]);
@@ -71,13 +74,13 @@ function Editor({ property }: { property?: Property }) {
         event.preventDefault();
         if (busy) return;
         const fields = new FormData(event.currentTarget);
-        if (!title.trim() || Number(price) <= 0) {
+        if (!title.trim() || salePrice === null || Number(salePrice) <= 0) {
             setTab('Imóvel');
-            setError('Informe o título e um valor de venda maior que zero.');
+            setError('Informe o título e um valor de venda válido em R$ mil, maior que zero.');
             return;
         }
         const data = {
-            title: title.trim(), property_type: type, description: fields.get('description'),
+            title: title.trim(), sale_price: salePrice, property_type: type, description: fields.get('description'),
             ...Object.fromEntries(address.map(([key]) => [key, String(fields.get(key) ?? '').trim() || null])),
             ...Object.fromEntries(numbers.map(([key, , step]) => {
                 const value = fields.get(key);
@@ -155,10 +158,12 @@ function Editor({ property }: { property?: Property }) {
                         {Object.entries(propertyTypes).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
                     </select></label>
                     <label>Descrição<textarea name="description" rows={4} defaultValue={property?.description ?? ''} /></label>
-                    <div className="field-grid">{numbers.map(([key, label, step]) => <label key={key}>{label}
-                        {key === 'sale_price' ? <input name={key} type="number" min="0.01" step={step} required value={price} onChange={event => setPrice(event.target.value)} />
-                            : <input name={key} type="number" min="0" step={step} defaultValue={property?.[key] ?? ''} />}
-                    </label>)}</div>
+                    <div className="field-grid">
+                        <PriceThousandsField label="Valor de venda" value={price} change={setPrice} required />
+                        {numbers.map(([key, label, step]) => <label key={key}>{label}
+                            <input name={key} type="number" min="0" step={step} defaultValue={property?.[key] ?? ''} />
+                        </label>)}
+                    </div>
                     <h2>Endereço</h2>
                     <div className="field-grid">{address.map(([key, label, max]) => <label key={key}>{label}
                         <input name={key} maxLength={max} defaultValue={property?.[key] ?? ''} onChange={key === 'address_state'
@@ -214,7 +219,7 @@ function Editor({ property }: { property?: Property }) {
                 <h2>Prévia do imóvel</h2>
                 {image && <img src={image} alt="Prévia da capa" />}
                 <span className={`status ${saved?.status ?? 'draft'}`}>{statuses[saved?.status ?? 'draft']}</span>
-                <strong>{title || 'Título do imóvel'}</strong><p>{money.format(Number(price))}</p>
+                <strong>{title || 'Título do imóvel'}</strong><p>{money.format(Number(salePrice))}</p>
             </aside>
         </div>
         {remove && <Sheet title="Remover foto?" close={() => { if (!busy) setRemove(undefined); }}>

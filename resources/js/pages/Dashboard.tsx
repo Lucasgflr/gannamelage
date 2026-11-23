@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePropertyFilters } from '../hooks/usePropertyFilters';
+import { useLocationOptions } from '../hooks/useLocationOptions';
+import { resolveLocation } from '../components/LocationFilters';
 import { useProperties } from '../hooks/useProperties';
 import { errorMessage } from '../services/api';
 import ActiveFilters from '../components/ActiveFilters';
@@ -15,7 +17,19 @@ export default function Dashboard() {
     const [filtersOpen, setFiltersOpen] = useState(false);
     const [reset, setReset] = useState(0);
     const results = useRef<HTMLDivElement>(null);
-    const query = useProperties(params);
+    const hasLocation = Boolean(params.address_city || params.address_neighborhood);
+    const locations = useLocationOptions(filtersOpen || hasLocation);
+    const location = hasLocation && locations.data
+        ? resolveLocation(locations.data, params.address_city, params.address_neighborhood) : null;
+    const city = location?.city;
+    const neighborhood = location?.neighborhood;
+    const query = useProperties(params.address_city ? { ...params, location_exact: '1' } : params);
+
+    useEffect(() => {
+        if (city !== undefined && ((params.address_city ?? '') !== city || (params.address_neighborhood ?? '') !== neighborhood)) {
+            update({ address_city: city, address_neighborhood: neighborhood }, true);
+        }
+    }, [city, neighborhood, params.address_city, params.address_neighborhood, update]);
     const page = query.data;
     const pageNumbers = page ? [...new Set([1, page.current_page - 1, page.current_page, page.current_page + 1, page.last_page])]
         .filter(number => number >= 1 && number <= page.last_page)
@@ -48,13 +62,13 @@ export default function Dashboard() {
             <StatusTabs value={params.status ?? ''} change={status => update({ status })} />
             <ActiveFilters params={params} remove={key => {
                 if (key === 'search') setReset(value => value + 1);
-                update({ [key]: '' });
+                update(key === 'address_city' ? { address_city: '', address_neighborhood: '' } : { [key]: '' });
             }} clear={() => {
                 setReset(value => value + 1);
                 clear();
             }} />
         </div>
-        {filtersOpen && <FilterSheet params={params} close={() => setFiltersOpen(false)} apply={update} />}
+        {filtersOpen && <FilterSheet params={params} locations={locations} close={() => setFiltersOpen(false)} apply={update} />}
         {message && <p role="status" className="panel">{message}</p>}
         <div className="row spread wrap results-toolbar" ref={results} tabIndex={-1}>
             <p className="muted" role="status">{query.isPending ? 'Carregando imóveis…' :

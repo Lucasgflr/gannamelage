@@ -1,5 +1,5 @@
 import { filterLabels, type Filter } from '../hooks/usePropertyFilters';
-import { propertyTypes, statuses, type Status } from '../types/property';
+import { money, propertyTypes, statuses, type Status } from '../types/property';
 
 export default function ActiveFilters({ params, remove, clear }: {
     params: Record<string, string>;
@@ -12,7 +12,9 @@ export default function ActiveFilters({ params, remove, clear }: {
     return <div className="row wrap" aria-label="Filtros ativos" role="group">
         {active.map(key => {
             const value = key === 'status' ? statuses[params[key] as Status] ?? params[key]
-                : key === 'property_type' ? propertyTypes[params[key]] ?? params[key] : params[key];
+                : key === 'property_type' ? propertyTypes[params[key]] ?? params[key]
+                : (key === 'min_price' || key === 'max_price') && Number.isFinite(Number(params[key]))
+                    ? money.format(Number(params[key])) : params[key];
             return <button className="btn chip" key={key} aria-label={`Remover filtro ${filterLabels[key]}: ${value}`} onClick={() => remove(key)}>
                 {filterLabels[key]}: {value} <span aria-hidden="true">×</span>
             </button>;

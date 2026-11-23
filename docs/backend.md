@@ -8,7 +8,7 @@ As bibliotecas de terceiros (pasta `vendor`) não fazem parte desta documentaç�
 
 É um sistema interno de imóveis da imobiliária. A equipe entra com e-mail e senha, cadastra imóveis, anexa fotos e gera um link público para mandar ao cliente. O cliente abre o link sem login.
 
-O servidor não desenha as telas. Ele devolve dados em JSON para o Vue e, numa única página HTML (`resources/views/app.blade.php`), entrega o arquivo que sobe a aplicação no navegador.
+O servidor não desenha as telas. Ele devolve dados em JSON para o React e, numa única página HTML (`resources/views/app.blade.php`), entrega o arquivo que sobe a aplicação no navegador.
 
 Tecnologias usadas de verdade neste projeto:
 
@@ -111,13 +111,13 @@ Login da equipe. Existe porque as telas não usam formulário clássico do Larav
 
 - `login` — exige e-mail e senha. Procura o usuário e compara a senha com `Hash::check`. Se falhar, a mensagem é genérica (“credenciais incorretas”), sem dizer se o e-mail existe. Se passar, cria um token de nome `api` e devolve token mais dados do usuário. A senha não sai na resposta.
 - `logout` — apaga somente o token usado naquela requisição. Outros tokens do mesmo usuário continuam válidos.
-- `user` — devolve quem está logado. A tela chama isso ao abrir, para mostrar o nome. Token inválido gera 401.
+- `user` — devolve quem está logado. O frontend consulta ao iniciar para verificar o token local. Token inválido gera 401.
 
 ### `app/Http/Controllers/Api/PropertyController.php`
 
-Toda a vida do imóvel. Existe para ser a API consumida pelo Vue.
+Toda a vida do imóvel. Existe para ser a API consumida pelo React.
 
-- `index` — lista paginada, sempre com proprietário e fotos. Aceita filtros separados (status, tipo, preço, condomínio, IPTU, cômodos, áreas, cidade, bairro) e um texto livre em `search`. O texto é lido em etapas: tipo, faixa ou limite de preço, IPTU, condomínio, cômodos. O que sobra é procurado em título, descrição, endereço e nome do dono. `per_page` só aceita 5, 10, 15, 20, 25, 30, 50 ou 100; outro valor vira 25. Ordem: mais recente primeiro.
+- `index` — lista paginada com proprietário e fotos. Valida status, tipo, faixas de preço, condomínio, IPTU e áreas, quantidades mínimas de cômodos, cidade e bairro. `search` aceita texto livre, ID numérico, `#123`, `código 123` e slug. A busca textual continua aceitando expressões como `casa 3 quartos iptu até 1000`. `sort` aceita `recent` (padrão), `oldest`, `price_asc`, `price_desc` e `title`. O ID desempata registros com o mesmo valor de ordenação. O valor padrão de `per_page` é 25 e as opções são 5, 10, 15, 20, 25, 30, 50 ou 100. Os links de paginação incluem os parâmetros da pesquisa.
 - `store` — cria o imóvel. Título, tipo e preço de venda são obrigatórios. Se vier nome de proprietário, cria um `Owner` e associa. Gera o slug com o título mais um código único. Grava `user_id` de quem está logado. Resposta 201.
 - `show` — um imóvel pelo id, com dono e fotos. Usado na ficha interna e na edição. Exige login.
 - `update` — altera só o que foi enviado. É assim que “Publicar” funciona: manda apenas `status: available`. Se já existe proprietário, atualiza o mesmo registro; se não existe e veio um nome, cria.
@@ -153,10 +153,10 @@ Linha da tabela `properties`. Centraliza as relações e dois atalhos de consult
 - `photos()` — fotos.
 - `user()` — quem cadastrou.
 - `mainPhoto()` — a foto com `is_main`. Se não houver, devolve vazio; as telas nesse caso usam a primeira foto.
-- `scopeAvailable` — só status `available`. A listagem de hoje usa `byStatus`.
-- `scopeByStatus` — filtra um status. O `index` chama isso quando a tela manda `?status=`.
+- `scopeAvailable` — só status `available`. Disponível para consultas que precisam desse status.
+- `scopeByStatus` — filtra um status.
 
-Ponto de manutenção: a coluna `iptu` existe no banco e o controller valida o campo, mas `iptu` não está em `$fillable` nem em `$casts`. O Laravel ignora o valor na gravação em massa. O IPTU digitado no formulário não é salvo até que `iptu` entre nessas duas listas.
+O IPTU é validado pelo controller, pode ser gravado em massa e é serializado com duas casas decimais.
 
 ### `app/Models/PropertyPhoto.php`
 
@@ -202,10 +202,10 @@ Exigem token:
 
 ### `routes/web.php`
 
-Páginas HTML. Existe porque o WhatsApp lê o HTML antes do Vue carregar. Sem esta rota especial, o link compartilhado sairia sem título e sem foto.
+Páginas HTML. Existe porque o WhatsApp lê o HTML antes do React carregar. Sem esta rota especial, o link compartilhado sairia sem título e sem foto.
 
 - `GET /p/{slug}` — busca o imóvel que não seja rascunho, monta título, descrição e imagem (`$og`) e devolve `app.blade.php`. Se a URL tiver `?cliente=maria`, a descrição começa com “Olá Maria!”.
-- `GET /{qualquer-coisa}` — também devolve `app.blade.php`, sem `$og`. O Vue decide qual tela mostrar.
+- `GET /{qualquer-coisa}` — também devolve `app.blade.php`, sem `$og`. O React decide qual tela mostrar.
 
 ### `routes/console.php`
 
@@ -213,7 +213,7 @@ Traz o comando de exemplo `inspire` do Laravel. Não participa dos imóveis. O c
 
 ### `resources/views/app.blade.php`
 
-Única view usada. Entrega o HTML inicial, as meta tags de compartilhamento e a `div#app`, onde o Vue entra. Comentada no próprio arquivo.
+Única view usada. Entrega o HTML inicial, as meta tags de compartilhamento e a `div#app`, em que o React é montado.
 
 ### `resources/views/welcome.blade.php`
 
@@ -221,7 +221,7 @@ Página de exemplo que vem com o Laravel. Nenhuma rota deste sistema a chama. Po
 
 ### `bootstrap/app.php`
 
-Arquivo de arranque do Laravel 11. Aponta as rotas e liga o Sanctum no modo que aceita cookie e token. Não contém regra de imóvel.
+Arquivo de arranque do Laravel 12. Aponta as rotas e liga o Sanctum no modo que aceita cookie e token. Não contém regra de imóvel.
 
 ## Marca d'água, em sequência
 
@@ -233,7 +233,6 @@ Arquivo de arranque do Laravel 11. Aponta as rotas e liga o Sanctum no modo que 
 
 ## Pontos que o técnico precisa conhecer
 
-- O IPTU é pedido na tela e validado no controller, mas o model `Property` não libera o campo `iptu` para gravação. O valor não persiste.
 - Duplicar copia também o proprietário para uma linha nova em `owners`. Apagar o imóvel não apaga o dono. Com o tempo a tabela `owners` acumula registros sem imóvel.
 - `showPublic` não devolve o proprietário. A ficha interna (`show`) devolve. Não misturar as duas rotas.
 - Reprocessar a marca d'água desenha de novo em cima da marca antiga. Não remove a anterior antes.

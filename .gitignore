@@ -25,3 +25,5 @@ yarn-error.log
 /playwright-report/
 /test-results/
 /playwright-screenshots/
+
+/dist-demo/

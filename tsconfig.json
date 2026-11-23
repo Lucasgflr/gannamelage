@@ -5,9 +5,10 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
+    "types": ["vite/client", "node"],
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["resources/js", "tests/e2e", "playwright.config.ts"]
+  "include": ["resources/js", "demo", "tests/e2e", "tests/demo", "playwright.config.ts", "playwright.demo.config.ts", "vite.demo.config.ts"]
 }

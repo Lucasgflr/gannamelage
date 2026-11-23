@@ -18,6 +18,7 @@ export const propertyTypes: Record<string, string> = {
 export interface Photo {
     id: number;
     path: string;
+    previewUrl?: string;
     is_main: boolean;
     order: number;
 }
@@ -65,7 +66,7 @@ export interface PropertyPage {
 }
 
 export const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-export const photoUrl = (photo: Photo) => `/storage/${photo.path}`;
+export const photoUrl = (photo: Photo) => photo.previewUrl ?? `/storage/${photo.path}`;
 export const coverPhoto = (property: Pick<Property, 'photos'>) => property.photos.find(photo => photo.is_main) ?? property.photos[0];
 export const locationLabel = (property: Property) =>
     [property.address_neighborhood, [property.address_city, property.address_state].filter(Boolean).join('/')].filter(Boolean).join(' · ');

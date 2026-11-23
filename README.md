@@ -41,3 +41,7 @@ O Playwright usa o Laravel com um arquivo SQLite e armazenamento de fotos tempor
 4. Em staging, confira o login, a listagem, a edição e uma URL pública existente. Se precisar reverter a entrega, restaure os arquivos da revisão anterior junto com seus assets compilados e mantenha o armazenamento persistente.
 
 [Documentação do frontend](docs/frontend.md) · [Documentação da API](docs/backend.md) · [Relatório da entrega React](docs/entrega-react-mobile.md)
+
+## Demonstração estática
+
+A demo em React usa dados fictícios e roda no navegador. Use `npm run build:demo` para gerar `dist-demo/`. O procedimento de teste e publicação no GitHub Pages está na documentação. [Demonstração estática](docs/demo-github-pages.md)

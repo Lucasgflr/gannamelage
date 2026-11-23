@@ -48,6 +48,7 @@ try {
     }
     mkdirSync(publicDir);
     closeSync(openSync(database, 'wx'));
+    symlinkSync(resolve(root, 'public/images'), join(publicDir, 'images'), 'dir');
     symlinkSync(resolve(root, 'public/build'), join(publicDir, 'build'), 'dir');
     symlinkSync(join(storage, 'app/public'), join(publicDir, 'storage'), 'dir');
 

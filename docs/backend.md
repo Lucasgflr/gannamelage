@@ -237,3 +237,11 @@ Arquivo de arranque do Laravel 12. Aponta as rotas e liga o Sanctum no modo que 
 - `showPublic` não devolve o proprietário. A ficha interna (`show`) devolve. Não misturar as duas rotas.
 - Reprocessar a marca d'água desenha de novo em cima da marca antiga. Não remove a anterior antes.
 - O log de upload em `uploadPhotos` grava caminho temporário e tamanho. É diagnóstico, não faz parte da resposta ao navegador.
+
+## Opções de localização e prévias de links
+
+`GET /api/properties/filter-options` exige Sanctum e retorna `{ cities: [{ name, neighborhoods }] }`. A consulta lê apenas os pares distintos de cidade e bairro. A resposta normaliza espaços e capitalização para deduplicar e mantém os dados cadastrados. A listagem mantém `address_city` e `address_neighborhood`. Com `location_exact=1`, os valores são comparados como opções completas com normalização de espaços e caixa.
+
+A rota `/p/{slug}` devolve metadados Open Graph no HTML, com URL canônica, preço e resumo. A imagem segue a ordem de prioridade da foto principal, das demais fotos disponíveis e de `public/images/og-institucional.jpg`. São informados o MIME e as dimensões reais do arquivo. A troca da foto principal por upload gera um novo caminho. O WhatsApp mantém cache próprio da página e da miniatura.
+
+Ao publicar em staging, confirme o HTTPS do anúncio e os retornos HTTP da URL presente em `og:image`, incluindo o acesso a `public/storage` sem autenticação. Inclua `public/images/og-institucional.jpg` no pacote publicado.

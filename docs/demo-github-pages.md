@@ -36,3 +36,5 @@ A demo tem configuração e saída próprias. O build Laravel continua com `npm 
 - A busca local aceita título, descrição, localização, slug e código. Os filtros estruturados, a ordenação e a paginação são simulados. A interpretação de frases avançadas pertence à API Laravel.
 - Links por hash de imóveis do catálogo inicial funcionam em outro navegador. Alterações locais e imóveis novos só aparecem no navegador que os gravou. As páginas estáticas usam metadados gerais da demo.
 - As fotos são ilustrativas e não representam imóveis cadastrados pela imobiliária. [Exterior](https://images.unsplash.com/photo-1600596542815-ffad4c1539a9) · [Interior](https://images.unsplash.com/photo-1600607687939-ce8a6c25118c)
+
+A imagem institucional JPEG de 1200 × 630 é incluída no build estático. A metatag Open Graph usa a URL pública dessa imagem e vale para todos os anúncios por hash.

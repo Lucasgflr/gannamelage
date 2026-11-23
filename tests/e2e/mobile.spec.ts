@@ -85,8 +85,12 @@ test('filtros combinados, remoção, paginação e ordenação preservam a URL',
     const sheet = page.getByRole('dialog', { name: 'Filtrar imóveis' });
     await expect(sheet).toBeVisible();
     await sheet.getByRole('combobox', { name: 'Tipo', exact: true }).selectOption('casa');
-    await sheet.getByLabel('Cidade').fill('Belo Horizonte');
+    await sheet.getByRole('combobox', { name: 'Cidade', exact: true }).selectOption('Belo Horizonte');
     await sheet.getByLabel('Quartos mínimos').fill('3');
+    await expect(sheet.getByRole('combobox', { name: 'Bairro', exact: true })).toBeEnabled();
+    await sheet.getByLabel('Preço mínimo (R$ mil)').fill('300');
+    await sheet.getByLabel('Preço máximo (R$ mil)').fill('950');
+    await screenshot(page, 'melhorias-filtros');
     await screenshot(page, '02-filtros');
     await sheet.getByText('Filtros avançados', { exact: true }).click();
     await sheet.getByLabel('IPTU máximo').fill('1000');
@@ -103,7 +107,7 @@ test('filtros combinados, remoção, paginação e ordenação preservam a URL',
     await page.getByRole('button', { name: 'Próxima' }).click();
     await expect(page).toHaveURL(/page=2/);
     const url = new URL(page.url());
-    expect(Object.fromEntries(url.searchParams)).toMatchObject({ sort: 'price_asc', status: 'available', bedrooms: '3', address_city: 'Belo Horizonte' });
+    expect(Object.fromEntries(url.searchParams)).toMatchObject({ sort: 'price_asc', status: 'available', bedrooms: '3', address_city: 'Belo Horizonte', min_price: '300000.00', max_price: '950000.00' });
     await expect(page.getByRole('article').first()).toContainText('Casa Jardim 3');
     await page.reload();
     await expect(page.getByRole('article').first()).toContainText('Casa Jardim 3');
@@ -125,6 +129,11 @@ test('detalhes privados e página pública com Open Graph', async ({ page }) => 
     await expect(page.getByRole('navigation', { name: 'Navegação interna' })).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'Dados do proprietário' })).toHaveCount(0);
     await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', 'Casa Jardim 0');
+    const html = await (await page.request.get(page.url())).text();
+    expect(html).toContain('content="R$ 610.000,00');
+    expect(html).toContain('property="og:image:type" content="image/jpeg"');
+    const cover = await page.locator('meta[property="og:image"]').getAttribute('content');
+    expect((await page.request.get(cover!)).headers()['content-type']).toContain('image/jpeg');
     await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', /\/storage\/properties\/1\/capa\.jpg$/);
     await noOverflow(page);
     await screenshot(page, '05-pagina-publica');
@@ -141,7 +150,7 @@ test('criação, foto multipart, edição, publicação, compartilhamento e excl
     await page.getByRole('button', { name: 'Salvar imóvel' }).click();
     await expect(page.getByRole('alert')).toContainText('Informe o título');
     await page.getByLabel('Título do imóvel').fill(title);
-    await page.getByLabel('Valor de venda').fill('620000');
+    await page.getByLabel('Valor de venda (R$ mil)').fill('620,5');
     await page.getByLabel('IPTU anual').fill('875');
     await page.getByRole('button', { name: 'Proprietário', exact: true }).click();
     await page.getByLabel('Nome', { exact: true }).fill('Proprietária de teste');
@@ -160,6 +169,8 @@ test('criação, foto multipart, edição, publicação, compartilhamento e excl
     await edit.click();
     await expect(page.getByLabel('IPTU anual')).toHaveValue('875.00');
     await expect(page.getByAltText('Prévia da capa')).toBeVisible();
+    await expect(page.getByLabel('Valor de venda (R$ mil)')).toHaveValue('620,5');
+    await screenshot(page, 'melhorias-edicao');
     await screenshot(page, '04-edicao');
     await page.getByLabel('Título do imóvel').fill(title + ' editada');
     await page.getByRole('button', { name: 'Salvar imóvel' }).click();
@@ -178,6 +189,7 @@ test('criação, foto multipart, edição, publicação, compartilhamento e excl
     await dialog.getByRole('button', { name: 'Copiar link' }).click();
     await expect(dialog.getByRole('status')).toContainText('Link copiado');
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(link);
+    await screenshot(page, 'melhorias-compartilhamento');
     await screenshot(page, '03-compartilhar');
     const publicPage = await context.newPage();
     await publicPage.goto(link);
@@ -312,6 +324,12 @@ test('duplica com novo slug, vende e mantém o anúncio público existente', asy
     await page.getByRole('link', { name: 'Ver página pública' }).click();
     await expect(page.getByRole('heading', { name: title })).toBeVisible();
     await expect(page.getByText('Vendido', { exact: true })).toBeVisible();
+    const fallback = new URL('/images/og-institucional.jpg', page.url()).href;
+    const html = await (await page.request.get(page.url())).text();
+    expect(html).toContain(`property="og:image" content="${fallback}"`);
+    const image = await page.request.get(fallback);
+    expect(image.ok()).toBe(true);
+    expect(image.headers()['content-type']).toContain('image/jpeg');
     for (const id of [copy.id, original.id]) {
         expect((await page.request.delete(`/api/properties/${id}`, { headers })).ok()).toBe(true);
     }

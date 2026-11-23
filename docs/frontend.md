@@ -32,3 +32,11 @@ O cartão leva à ficha interna pela foto e mantém Editar, Compartilhar e Mais 
 Após instalar as dependências PHP e npm, use `npm run test:e2e`. A suíte compila os assets, sobe o Laravel localmente e cria um SQLite descartável para cada execução. São seis projetos Chromium com touch em telas até 768 px de largura. Para usar o Chromium do sistema, defina `PLAYWRIGHT_CHROMIUM_PATH`.
 
 Use `E2E_SCREENSHOTS=1 npm run test:e2e -- --project=390x844` para produzir as capturas em `playwright-screenshots/`. Opcionalmente, defina `E2E_PHOTO_1` e `E2E_PHOTO_2` com caminhos para fotos JPEG de demonstração. A suíte gera imagens simples quando esses parâmetros estão ausentes.
+
+## Localização, preços e compartilhamento
+
+Os filtros consultam as cidades cadastradas ao abrir a folha de filtros ou ao carregar uma URL com localização. O bairro depende da cidade selecionada. A remoção de uma cidade também limpa o bairro. Os links continuam usando `address_city` e `address_neighborhood`. A API preserva a pesquisa parcial legada, e os seletores pedem igualdade com `location_exact=1`.
+
+O valor de venda e os limites de preço usam R$ mil na interface. Digite `650,5` para R$ 650.500,00 ou `1,5 milhão` para R$ 1.500.000,00. O ponto separa grupos de milhares e a vírgula marca decimais. O formulário mostra o valor em reais antes de salvar. Payloads e URLs continuam em reais. Condomínio e IPTU também continuam em reais nos campos de entrada.
+
+Os componentes de compartilhamento usam o mesmo link por ambiente. Na aplicação Laravel, o HTML de `/p/:slug` inclui título, preço, resumo e metadados JPEG, PNG ou de outro formato reconhecido para a foto principal disponível. A primeira foto disponível e a imagem institucional são alternativas, nessa ordem. A foto original mantém suas dimensões e marca d’água. Na demonstração, todos os links por hash usam o mesmo HTML com a imagem institucional.

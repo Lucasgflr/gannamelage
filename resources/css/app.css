@@ -49,6 +49,7 @@ fieldset { min-width: 0; }
     justify-content: space-between;
     gap: .75rem;
 }
+.topbar .brand { min-height: 44px; }
 .brand { display: inline-flex; gap: .55rem; align-items: center; font-weight: 750; font-size: 1.05rem; line-height: 1.05; }
 .brand small { display: block; margin-top: .2rem; color: var(--muted); font-size: .75rem; font-weight: 550; }
 .brand-icon { border-radius: .65rem; display: grid; place-items: center; width: 2.4rem; height: 2.4rem; color: #fff; background: var(--accent); flex: none; }

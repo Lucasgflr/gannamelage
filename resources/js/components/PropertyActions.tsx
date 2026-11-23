@@ -48,7 +48,7 @@ export default function PropertyActions({ property, notify }: { property: Proper
     return <div className="card-actions">
         <ShareButton property={property} />
         <Link className="btn" to={`/properties/${property.id}/edit`}>Editar</Link>
-        <button className="btn" type="button" aria-label="Mais opções" aria-haspopup="dialog"
+        <button className="btn" type="button" aria-label="Mais opções" aria-haspopup="dialog" disabled={mutation.isPending}
             onClick={() => { mutation.reset(); setMenu(true); }}>
             <i className="fa-solid fa-ellipsis" aria-hidden="true" />
         </button>

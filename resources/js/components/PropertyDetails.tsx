@@ -56,17 +56,16 @@ export default function PropertyDetails({ property, isPublic }: { property: Prop
                 <img loading="lazy" src={photoUrl(photo)} alt={`Foto ${index + 1}`} />
             </button>)}
         </div></section>}
-        {photoIndex !== null && photos[photoIndex] && <Sheet title={`Foto ${photoIndex + 1} de ${photos.length}`} close={() => setPhotoIndex(null)}>
-            <div onKeyDown={event => {
+        {photoIndex !== null && photos[photoIndex] && <Sheet title={`Foto ${photoIndex + 1} de ${photos.length}`} close={() => setPhotoIndex(null)}
+            onKeyDown={event => {
                 if (event.key === 'ArrowLeft') move(-1);
                 if (event.key === 'ArrowRight') move(1);
             }}>
-                <img className="lightbox-image" src={photoUrl(photos[photoIndex])} alt={`Foto ${photoIndex + 1}`} />
-                {photos.length > 1 && <div className="row spread">
-                    <button className="btn" onClick={() => move(-1)}>Anterior</button>
-                    <button className="btn" onClick={() => move(1)}>Próxima</button>
-                </div>}
-            </div>
+            <img className="lightbox-image" src={photoUrl(photos[photoIndex])} alt={`Foto ${photoIndex + 1}`} />
+            {photos.length > 1 && <div className="row spread">
+                <button className="btn" onClick={() => move(-1)}>Anterior</button>
+                <button className="btn" onClick={() => move(1)}>Próxima</button>
+            </div>}
         </Sheet>}
     </article>;
 }

@@ -1,6 +1,11 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type KeyboardEventHandler, type ReactNode } from 'react';
 
-export default function Sheet({ title, children, close }: { title: string; children: ReactNode; close: () => void }) {
+export default function Sheet({ title, children, close, onKeyDown }: {
+    title: string;
+    children: ReactNode;
+    close: () => void;
+    onKeyDown?: KeyboardEventHandler<HTMLDialogElement>;
+}) {
     const ref = useRef<HTMLDialogElement>(null);
     const titleId = useId();
 
@@ -10,7 +15,7 @@ export default function Sheet({ title, children, close }: { title: string; child
         return () => dialog.close();
     }, []);
 
-    return <dialog ref={ref} className="sheet" aria-labelledby={titleId}
+    return <dialog ref={ref} className="sheet" aria-labelledby={titleId} onKeyDown={onKeyDown}
         onCancel={event => { event.preventDefault(); close(); }}
         onClick={event => { if (event.target === event.currentTarget) close(); }}>
         <div className="sheet-content">

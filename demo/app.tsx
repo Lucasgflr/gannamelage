@@ -49,6 +49,6 @@ function Demo() {
 
 createRoot(document.getElementById('app')!).render(
     <QueryClientProvider client={client}>
-        <HashRouter><Demo /></HashRouter>
+        <HashRouter useTransitions={false}><Demo /></HashRouter>
     </QueryClientProvider>,
 );

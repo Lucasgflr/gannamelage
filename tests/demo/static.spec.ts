@@ -66,8 +66,11 @@ test('cards, pesquisa por código, filtros combinados e paginação', async ({ p
     await expect(page.getByRole('status')).toHaveText('2 imóveis encontrados');
     expect(new URL(page.url()).hash).toContain('address_city=Vila+Exemplo');
     await page.getByRole('button', { name: 'Limpar filtros' }).click();
+    await expect(page.getByRole('status')).toHaveText('9 imóveis encontrados');
     await page.getByRole('combobox', { name: 'Imóveis por página' }).selectOption('5');
+    await expect(page.getByRole('article')).toHaveCount(5);
     await page.getByRole('combobox', { name: 'Ordenação' }).selectOption('price_asc');
+    await expect(page).toHaveURL(/per_page=5&sort=price_asc/);
     await page.getByRole('button', { name: 'Próxima' }).click();
     await expect(page.getByRole('status')).toHaveText('9 imóveis encontrados');
     expect(new URL(page.url()).hash).toContain('page=2');

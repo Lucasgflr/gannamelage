@@ -8,7 +8,7 @@ const path = (relative: string) => fileURLToPath(new URL(relative, import.meta.u
 export default defineConfig({
     root: path('./demo'),
     base: '/gannamelage/',
-    publicDir: false,
+    publicDir: path('./public/images'),
     plugins: [react(), tailwindcss()],
     resolve: {
         alias: [

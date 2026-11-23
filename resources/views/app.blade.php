@@ -12,11 +12,12 @@
     <meta property="og:title" content="{{ $og['title'] ?? config('app.name') }}">
     <meta property="og:description" content="{{ $og['description'] ?? 'Gannam & Lage - Vendas de Imóveis' }}">
     <meta property="og:url" content="{{ $og['url'] ?? url('/') }}">
-    {{-- A imagem só entra se o imóvel tiver foto. Sem isso, a rede mostra o link sem capa. --}}
     @if(!empty($og['image']))
     <meta property="og:image" content="{{ $og['image'] }}">
-    <meta property="og:image:width" content="1200">
-    <meta property="og:image:height" content="630">
+    <meta property="og:image:width" content="{{ $og['image_width'] }}">
+    <meta property="og:image:height" content="{{ $og['image_height'] }}">
+    <meta property="og:image:type" content="{{ $og['image_type'] }}">
+    <meta property="og:image:alt" content="{{ $og['image_alt'] }}">
     @endif
 
     @viteReactRefresh

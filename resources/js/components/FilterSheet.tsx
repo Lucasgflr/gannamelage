@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import { advancedFilters, mainFilters, type Filter } from '../hooks/usePropertyFilters';
 import { propertyTypes } from '../types/property';
 import Sheet from './Sheet';
@@ -12,6 +12,7 @@ export default function FilterSheet({ params, close, apply }: {
     apply: (values: Partial<Record<Filter, string>>) => void;
 }) {
     const [error, setError] = useState('');
+    const formId = useId();
 
     function submit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -44,15 +45,14 @@ export default function FilterSheet({ params, close, apply }: {
         </label>;
     }
 
-    return <Sheet title="Filtrar imóveis" close={close}>
-        <form className="stack" onSubmit={submit}>
+    return <Sheet title="Filtrar imóveis" close={close} footer={<button className="btn primary" form={formId}>Aplicar filtros</button>}>
+        <form id={formId} className="stack" onSubmit={submit}>
             <div className="field-grid">{Object.entries(mainFilters).map(field)}</div>
             <details open={Object.keys(advancedFilters).some(key => params[key]) || undefined}>
                 <summary className="filter-summary">Filtros avançados</summary>
                 <div className="field-grid">{Object.entries(advancedFilters).map(field)}</div>
             </details>
             {error && <p role="alert">{error}</p>}
-            <button className="btn primary">Aplicar filtros</button>
         </form>
     </Sheet>;
 }

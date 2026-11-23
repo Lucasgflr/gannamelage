@@ -1,10 +1,11 @@
 import { useEffect, useId, useRef, type KeyboardEventHandler, type ReactNode } from 'react';
 
-export default function Sheet({ title, children, close, onKeyDown }: {
+export default function Sheet({ title, children, close, onKeyDown, footer }: {
     title: string;
     children: ReactNode;
     close: () => void;
     onKeyDown?: KeyboardEventHandler<HTMLDialogElement>;
+    footer?: ReactNode;
 }) {
     const ref = useRef<HTMLDialogElement>(null);
     const titleId = useId();
@@ -23,7 +24,8 @@ export default function Sheet({ title, children, close, onKeyDown }: {
                 <h2 id={titleId}>{title}</h2>
                 <button type="button" className="btn quiet" aria-label="Fechar" onClick={close}>✕</button>
             </header>
-            {children}
+            <div className="sheet-body">{children}</div>
+            {footer}
         </div>
     </dialog>;
 }

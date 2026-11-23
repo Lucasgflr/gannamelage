@@ -13,7 +13,7 @@ use Illuminate\Support\Str;
  * Cuida de tudo que acontece com um imóvel: listar, criar, editar,
  * apagar, duplicar, vender, enviar fotos e montar a página pública.
  *
- * Foi criado para ser a API que o Vue consome. Quase todas as rotas
+ * Foi criado para ser a API que o painel consome. Quase todas as rotas
  * exigem login (middleware auth:sanctum em routes/api.php). A única
  * exceção é showPublic, usada pela landing page que o cliente abre
  * sem senha.
@@ -48,205 +48,195 @@ class PropertyController extends Controller
      * (property_type, min_price, bedrooms, address_city, etc.).
      * Esses filtros se somam à busca, não a substituem.
      *
-     * A resposta é paginada. per_page só aceita 5, 10, 15, 20, 25, 30,
-     * 50 ou 100. Qualquer outro valor cai para 25. A ordem é do mais
-     * recente para o mais antigo (latest).
+     * A paginação preserva os filtros e usa o ID para desempatar a ordenação.
      */
     public function index(Request $request)
     {
+        $minimums = ['bedrooms', 'suites', 'bathrooms', 'garage_spots'];
+        $bounds = [
+            'price' => 'sale_price',
+            'condo_price' => 'condo_price',
+            'iptu' => 'iptu',
+            'land_area' => 'land_area',
+            'built_area' => 'built_area',
+        ];
+        $sorts = [
+            'recent' => ['created_at', 'desc', 'desc'],
+            'oldest' => ['created_at', 'asc', 'asc'],
+            'price_asc' => ['sale_price', 'asc', 'asc'],
+            'price_desc' => ['sale_price', 'desc', 'asc'],
+            'title' => ['title', 'asc', 'asc'],
+        ];
+
+        $rules = [
+            'search' => 'nullable|string|max:255',
+            'status' => 'nullable|in:draft,available,reserved,sold',
+            'property_type' => 'nullable|string|max:255',
+            'address_city' => 'nullable|string|max:255',
+            'address_neighborhood' => 'nullable|string|max:255',
+            'page' => 'nullable|integer|min:1|max:1000000',
+            'per_page' => 'nullable|integer',
+            'sort' => 'nullable|in:'.implode(',', array_keys($sorts)),
+        ];
+        foreach ($minimums as $column) {
+            $rules[$column] = 'nullable|integer|min:0|max:4294967295';
+        }
+        foreach ($bounds as $key => $column) {
+            $rules["min_{$key}"] = 'nullable|numeric|min:0|max:9999999999999.99';
+            $rules["max_{$key}"] = 'nullable|numeric|min:0|max:9999999999999.99';
+            if ($request->filled("min_{$key}")) {
+                $rules["max_{$key}"] .= "|gte:min_{$key}";
+            }
+        }
+        $filters = $request->validate($rules);
+
         $query = Property::with(['owner', 'photos']);
-
-        if ($request->filled('status')) {
-            $query->byStatus($request->status);
+        foreach (['status', 'property_type'] as $column) {
+            if (isset($filters[$column])) {
+                $query->where($column, $filters[$column]);
+            }
         }
-
-        $textSearch = null;
-        if ($request->filled('search')) {
-            $rawSearch = trim($request->search);
-            $searchLower = mb_strtolower($rawSearch);
-
-            // Procura um tipo conhecido dentro da frase (casa, lote, terreno...).
-            // O primeiro que aparecer vira filtro de property_type e sai do texto.
-            $tipos = ['casa', 'apartamento', 'lote', 'galpão', 'galpao', 'chácara', 'chacara', 'sítio', 'sitio', 'terreno', 'sala comercial', 'salão', 'salao', 'kitnet', 'loft', 'cobertura', 'duplex', 'triplex'];
-            foreach ($tipos as $tipo) {
-                if (str_contains($searchLower, $tipo)) {
-                    $query->where('property_type', 'like', "%{$tipo}%");
-                    $rawSearch = preg_replace('/\b' . preg_quote($tipo, '/') . '\b/iu', '', $rawSearch);
-                    $searchLower = mb_strtolower(trim($rawSearch));
-                    break;
+        foreach ($minimums as $column) {
+            if (isset($filters[$column])) {
+                $query->where($column, '>=', $filters[$column]);
+            }
+        }
+        foreach ($bounds as $key => $column) {
+            foreach (['min' => '>=', 'max' => '<='] as $bound => $operator) {
+                if (isset($filters["{$bound}_{$key}"])) {
+                    $query->where($column, $operator, $filters["{$bound}_{$key}"]);
                 }
             }
+        }
+        foreach (['address_city', 'address_neighborhood'] as $column) {
+            if (isset($filters[$column])) {
+                $query->where($column, 'like', '%'.$filters[$column].'%');
+            }
+        }
 
-            // Faixa de preço: "400000-800000", "400k-800k" ou "400.000 - 800.000".
-            // O "k", "mil" ou "m" multiplica o número por 1000 (ver parseMoney).
-            if (preg_match('/(\d[\d\.\s]*)(k|mil|m)?\s*[-–]\s*(\d[\d\.\s]*)(k|mil|m)?/iu', $rawSearch, $m)) {
-                $min = $this->parseMoney($m[1], $m[2] ?? '');
-                $max = $this->parseMoney($m[3], $m[4] ?? '');
-                $query->whereBetween('sale_price', [$min, $max]);
-                $rawSearch = preg_replace('/\d[\d\.\s]*(?:k|mil|m)?\s*[-–]\s*\d[\d\.\s]*(?:k|mil|m)?/iu', '', $rawSearch, 1);
-                $searchLower = mb_strtolower(trim($rawSearch));
-            }
-            // Preço mínimo, só se não houve faixa. Ex.: "a partir de 400k", "acima de 500000".
-            elseif (preg_match('/(?:a\s*partir\s*de|acima\s*de|min|maior\s*que|maiores?\s*que|>+)\s*(\d[\d\.\s]*)(k|mil|m)?/iu', $rawSearch, $m)) {
-                $min = $this->parseMoney($m[1], $m[2] ?? '');
-                $query->where('sale_price', '>=', $min);
-                $rawSearch = preg_replace('/(?:a\s*partir\s*de|acima\s*de|min|maior\s*que|maiores?\s*que|>+)\s*\d[\d\.\s]*(?:k|mil|m)?/iu', '', $rawSearch, 1);
-                $searchLower = mb_strtolower(trim($rawSearch));
-            }
-            // Preço máximo, só se não houve faixa nem mínimo. Ex.: "até 800000", "abaixo de 500k".
-            elseif (preg_match('/(?:até|ate|abaixo\s*de|max|menor\s*que|menores?\s*que|<)\s*(\d[\d\.\s]*)(k|mil|m)?/iu', $rawSearch, $m)) {
-                $max = $this->parseMoney($m[1], $m[2] ?? '');
-                $query->where('sale_price', '<=', $max);
-                $rawSearch = preg_replace('/(?:até|ate|abaixo\s*de|max|menor\s*que|menores?\s*que|<)\s*\d[\d\.\s]*(?:k|mil|m)?/iu', '', $rawSearch, 1);
-                $searchLower = mb_strtolower(trim($rawSearch));
-            }
+        if (!empty($filters['search']) || ($filters['search'] ?? null) === '0') {
+            $search = trim($filters['search']);
+            $query->where(function ($matches) use ($search) {
+                if (preg_match('/^(?:(?:id|c[oó]d(?:igo)?\.?)\s*:?\s*|#\s*)?(\d{1,18})$/iu', $search, $code)) {
+                    $matches->where('id', (int) $code[1]);
+                    if ($search === $code[1]) {
+                        $matches->orWhere(fn ($legacy) => $this->applyTextSearch($legacy, $search));
+                    }
 
-            // IPTU. "iptu 500" filtra o valor exato. "iptu até 1000" filtra o teto.
-            if (preg_match('/iptu[:\s]*(até|ate|ate)?[:\s]*(\d[\d\.\s]*)/iu', $rawSearch, $m)) {
-                $iptu = (float) str_replace(['.', ' ', ','], ['', '', '.'], $m[2]);
-                if (!empty($m[1])) {
-                    $query->where('iptu', '<=', $iptu);
-                } else {
-                    $query->where('iptu', $iptu);
+                    return;
                 }
-                $rawSearch = preg_replace('/iptu[:\s]*(?:até|ate|ate)?[:\s]*\d[\d\.\s]*/iu', '', $rawSearch, 1);
-                $searchLower = mb_strtolower(trim($rawSearch));
-            }
 
-            // Condomínio. Aceita "cond", "condo" ou "condominio", com ou sem "até".
-            if (preg_match('/cond(?:omínio|ominio|o)?[:\s]*(até|ate|ate)?[:\s]*(\d[\d\.\s]*)/iu', $rawSearch, $m)) {
-                $condo = (float) str_replace(['.', ' ', ','], ['', '', '.'], $m[2]);
-                if (!empty($m[1])) {
-                    $query->where('condo_price', '<=', $condo);
-                } else {
-                    $query->where('condo_price', $condo);
-                }
-                $rawSearch = preg_replace('/cond(?:omínio|ominio|o)?[:\s]*(?:até|ate|ate)?[:\s]*\d[\d\.\s]*/iu', '', $rawSearch, 1);
-                $searchLower = mb_strtolower(trim($rawSearch));
-            }
-
-            // Cômodos. O número é tratado como mínimo (3 quartos = 3 ou mais).
-            // A palavra decide a coluna: quarto/dormitório, suíte, banheiro ou garagem/vaga.
-            if (preg_match('/(\d+)\s*(quartos?|q|dormitórios?|dormitorios?|suítes?|suites?|banheiros?|garagens?|vagas?)/iu', $rawSearch, $m)) {
-                $num = (int) $m[1];
-                $word = mb_strtolower($m[2]);
-                if (str_contains($word, 'quarto') || str_contains($word, 'q') || str_contains($word, 'dormit')) {
-                    $query->where('bedrooms', '>=', $num);
-                } elseif (str_contains($word, 'suít') || str_contains($word, 'suit')) {
-                    $query->where('suites', '>=', $num);
-                } elseif (str_contains($word, 'banheiro')) {
-                    $query->where('bathrooms', '>=', $num);
-                } elseif (str_contains($word, 'garag') || str_contains($word, 'vaga')) {
-                    $query->where('garage_spots', '>=', $num);
-                }
-                $rawSearch = preg_replace('/\d+\s*(quartos?|q|dormitórios?|dormitorios?|suítes?|suites?|banheiros?|garagens?|vagas?)/iu', '', $rawSearch, 1);
-                $searchLower = mb_strtolower(trim($rawSearch));
-            }
-
-            $textSearch = trim($rawSearch);
-
-            // O que sobrou da frase é procurado em título, descrição, endereço
-            // e no nome do proprietário. Qualquer um desses campos basta.
-            if (!empty($textSearch)) {
-                $query->where(function ($q) use ($textSearch) {
-                    $q->where('title', 'like', "%{$textSearch}%")
-                      ->orWhere('description', 'like', "%{$textSearch}%")
-                      ->orWhere('address_street', 'like', "%{$textSearch}%")
-                      ->orWhere('address_neighborhood', 'like', "%{$textSearch}%")
-                      ->orWhere('address_city', 'like', "%{$textSearch}%")
-                      ->orWhere('address_state', 'like', "%{$textSearch}%")
-                      ->orWhereHas('owner', function ($ownerQuery) use ($textSearch) {
-                          $ownerQuery->where('name', 'like', "%{$textSearch}%");
-                      });
-                });
-            }
+                $matches->where('slug', $search)
+                    ->orWhere('title', 'like', "%{$search}%")
+                    ->orWhere('address_neighborhood', 'like', "%{$search}%")
+                    ->orWhere('address_city', 'like', "%{$search}%")
+                    ->orWhere(fn ($legacy) => $this->applyTextSearch($legacy, $search));
+            });
         }
 
-        if ($request->filled('property_type')) {
-            $query->where('property_type', $request->property_type);
-        }
-
-        if ($request->filled('bedrooms')) {
-            $query->where('bedrooms', '>=', $request->bedrooms);
-        }
-
-        if ($request->filled('suites')) {
-            $query->where('suites', '>=', $request->suites);
-        }
-
-        if ($request->filled('bathrooms')) {
-            $query->where('bathrooms', '>=', $request->bathrooms);
-        }
-
-        if ($request->filled('garage_spots')) {
-            $query->where('garage_spots', '>=', $request->garage_spots);
-        }
-
-        $query->where(function ($q) use ($request) {
-            if ($request->filled('min_price') && $request->filled('max_price')) {
-                $q->whereBetween('sale_price', [$request->min_price, $request->max_price]);
-            } elseif ($request->filled('min_price')) {
-                $q->where('sale_price', '>=', $request->min_price);
-            } elseif ($request->filled('max_price')) {
-                $q->where('sale_price', '<=', $request->max_price);
-            }
-        });
-
-        $query->where(function ($q) use ($request) {
-            if ($request->filled('min_condo_price') && $request->filled('max_condo_price')) {
-                $q->whereBetween('condo_price', [$request->min_condo_price, $request->max_condo_price]);
-            } elseif ($request->filled('min_condo_price')) {
-                $q->where('condo_price', '>=', $request->min_condo_price);
-            } elseif ($request->filled('max_condo_price')) {
-                $q->where('condo_price', '<=', $request->max_condo_price);
-            }
-        });
-
-        $query->where(function ($q) use ($request) {
-            if ($request->filled('min_iptu') && $request->filled('max_iptu')) {
-                $q->whereBetween('iptu', [$request->min_iptu, $request->max_iptu]);
-            } elseif ($request->filled('min_iptu')) {
-                $q->where('iptu', '>=', $request->min_iptu);
-            } elseif ($request->filled('max_iptu')) {
-                $q->where('iptu', '<=', $request->max_iptu);
-            }
-        });
-
-        $query->where(function ($q) use ($request) {
-            if ($request->filled('min_land_area') && $request->filled('max_land_area')) {
-                $q->whereBetween('land_area', [$request->min_land_area, $request->max_land_area]);
-            } elseif ($request->filled('min_land_area')) {
-                $q->where('land_area', '>=', $request->min_land_area);
-            } elseif ($request->filled('max_land_area')) {
-                $q->where('land_area', '<=', $request->max_land_area);
-            }
-        });
-
-        $query->where(function ($q) use ($request) {
-            if ($request->filled('min_built_area') && $request->filled('max_built_area')) {
-                $q->whereBetween('built_area', [$request->min_built_area, $request->max_built_area]);
-            } elseif ($request->filled('min_built_area')) {
-                $q->where('built_area', '>=', $request->min_built_area);
-            } elseif ($request->filled('max_built_area')) {
-                $q->where('built_area', '<=', $request->max_built_area);
-            }
-        });
-
-        if ($request->filled('address_city')) {
-            $query->where('address_city', 'like', "%{$request->address_city}%");
-        }
-
-        if ($request->filled('address_neighborhood')) {
-            $query->where('address_neighborhood', 'like', "%{$request->address_neighborhood}%");
-        }
-
-        $perPage = $request->input('per_page', 25);
-        $allowedPerPage = [5, 10, 15, 20, 25, 30, 50, 100];
-        if (!in_array((int)$perPage, $allowedPerPage)) {
+        $perPage = (int) ($filters['per_page'] ?? 25);
+        if (!in_array($perPage, [5, 10, 15, 20, 25, 30, 50, 100], true)) {
             $perPage = 25;
         }
 
-        return response()->json($query->latest()->paginate($perPage));
+        [$column, $direction, $idDirection] = $sorts[$filters['sort'] ?? 'recent'];
+
+        return response()->json($query->orderBy($column, $direction)
+            ->orderBy('id', $idDirection)
+            ->paginate($perPage)
+            ->withQueryString());
+    }
+
+    private function applyTextSearch($query, string $rawSearch): void
+    {
+        // Procura um tipo conhecido dentro da frase (casa, lote, terreno...).
+        // O primeiro que aparecer vira filtro de property_type e sai do texto.
+        $tipos = ['casa', 'apartamento', 'lote', 'galpão', 'galpao', 'chácara', 'chacara', 'sítio', 'sitio', 'terreno', 'sala comercial', 'salão', 'salao', 'kitnet', 'loft', 'cobertura', 'duplex', 'triplex'];
+        foreach ($tipos as $tipo) {
+            if (preg_match('/\b'.preg_quote($tipo, '/').'\b/iu', $rawSearch)) {
+                $query->where('property_type', 'like', "%{$tipo}%");
+                $rawSearch = preg_replace('/\b' . preg_quote($tipo, '/') . '\b/iu', '', $rawSearch);
+                break;
+            }
+        }
+
+        // IPTU. "iptu 500" filtra o valor exato. "iptu até 1000" filtra o teto.
+        if (preg_match('/iptu[:\s]*(até|ate|ate)?[:\s]*(\d[\d\.\s]*)/iu', $rawSearch, $m)) {
+            $iptu = (float) str_replace(['.', ' ', ','], ['', '', '.'], $m[2]);
+            if (!empty($m[1])) {
+                $query->where('iptu', '<=', $iptu);
+            } else {
+                $query->where('iptu', $iptu);
+            }
+            $rawSearch = preg_replace('/iptu[:\s]*(?:até|ate|ate)?[:\s]*\d[\d\.\s]*/iu', '', $rawSearch, 1);
+        }
+
+        // Condomínio. Aceita "cond", "condo" ou "condominio", com ou sem "até".
+        if (preg_match('/cond(?:omínio|ominio|o)?[:\s]*(até|ate|ate)?[:\s]*(\d[\d\.\s]*)/iu', $rawSearch, $m)) {
+            $condo = (float) str_replace(['.', ' ', ','], ['', '', '.'], $m[2]);
+            if (!empty($m[1])) {
+                $query->where('condo_price', '<=', $condo);
+            } else {
+                $query->where('condo_price', $condo);
+            }
+            $rawSearch = preg_replace('/cond(?:omínio|ominio|o)?[:\s]*(?:até|ate|ate)?[:\s]*\d[\d\.\s]*/iu', '', $rawSearch, 1);
+        }
+
+        // Faixa de preço: "400000-800000", "400k-800k" ou "400.000 - 800.000".
+        // O "k", "mil" ou "m" multiplica o número por 1000 (ver parseMoney).
+        if (preg_match('/(\d[\d\.\s]*)(k|mil|m)?\s*[-–]\s*(\d[\d\.\s]*)(k|mil|m)?/iu', $rawSearch, $m)) {
+            $min = $this->parseMoney($m[1], $m[2] ?? '');
+            $max = $this->parseMoney($m[3], $m[4] ?? '');
+            $query->whereBetween('sale_price', [$min, $max]);
+            $rawSearch = preg_replace('/\d[\d\.\s]*(?:k|mil|m)?\s*[-–]\s*\d[\d\.\s]*(?:k|mil|m)?/iu', '', $rawSearch, 1);
+        }
+        // Preço mínimo, só se não houve faixa. Ex.: "a partir de 400k", "acima de 500000".
+        elseif (preg_match('/(?:a\s*partir\s*de|acima\s*de|min|maior\s*que|maiores?\s*que|>+)\s*(\d[\d\.\s]*)(k|mil|m)?/iu', $rawSearch, $m)) {
+            $min = $this->parseMoney($m[1], $m[2] ?? '');
+            $query->where('sale_price', '>=', $min);
+            $rawSearch = preg_replace('/(?:a\s*partir\s*de|acima\s*de|min|maior\s*que|maiores?\s*que|>+)\s*\d[\d\.\s]*(?:k|mil|m)?/iu', '', $rawSearch, 1);
+        }
+        // Preço máximo, só se não houve faixa nem mínimo. Ex.: "até 800000", "abaixo de 500k".
+        elseif (preg_match('/(?:até|ate|abaixo\s*de|max|menor\s*que|menores?\s*que|<)\s*(\d[\d\.\s]*)(k|mil|m)?/iu', $rawSearch, $m)) {
+            $max = $this->parseMoney($m[1], $m[2] ?? '');
+            $query->where('sale_price', '<=', $max);
+            $rawSearch = preg_replace('/(?:até|ate|abaixo\s*de|max|menor\s*que|menores?\s*que|<)\s*\d[\d\.\s]*(?:k|mil|m)?/iu', '', $rawSearch, 1);
+        }
+
+        // Cômodos. O número é tratado como mínimo (3 quartos = 3 ou mais).
+        // A palavra decide a coluna: quarto/dormitório, suíte, banheiro ou garagem/vaga.
+        if (preg_match('/(\d+)\s*(quartos?|q|dormitórios?|dormitorios?|suítes?|suites?|banheiros?|garagens?|vagas?)/iu', $rawSearch, $m)) {
+            $num = (int) $m[1];
+            $word = mb_strtolower($m[2]);
+            if (str_contains($word, 'quarto') || str_contains($word, 'q') || str_contains($word, 'dormit')) {
+                $query->where('bedrooms', '>=', $num);
+            } elseif (str_contains($word, 'suít') || str_contains($word, 'suit')) {
+                $query->where('suites', '>=', $num);
+            } elseif (str_contains($word, 'banheiro')) {
+                $query->where('bathrooms', '>=', $num);
+            } elseif (str_contains($word, 'garag') || str_contains($word, 'vaga')) {
+                $query->where('garage_spots', '>=', $num);
+            }
+            $rawSearch = preg_replace('/\d+\s*(quartos?|q|dormitórios?|dormitorios?|suítes?|suites?|banheiros?|garagens?|vagas?)/iu', '', $rawSearch, 1);
+        }
+
+        $textSearch = trim($rawSearch);
+
+        // O que sobrou da frase é procurado em título, descrição, endereço
+        // e no nome do proprietário. Qualquer um desses campos basta.
+        if ($textSearch !== '') {
+            $query->where(function ($q) use ($textSearch) {
+                $q->where('title', 'like', "%{$textSearch}%")
+                  ->orWhere('description', 'like', "%{$textSearch}%")
+                  ->orWhere('address_street', 'like', "%{$textSearch}%")
+                  ->orWhere('address_neighborhood', 'like', "%{$textSearch}%")
+                  ->orWhere('address_city', 'like', "%{$textSearch}%")
+                  ->orWhere('address_state', 'like', "%{$textSearch}%")
+                  ->orWhereHas('owner', function ($ownerQuery) use ($textSearch) {
+                      $ownerQuery->where('name', 'like', "%{$textSearch}%");
+                  });
+            });
+        }
     }
 
     /**
@@ -375,8 +365,8 @@ class PropertyController extends Controller
                 $property->owner()->associate($owner);
                 $property->save();
             }
-            unset($data['owner']);
         }
+        unset($data['owner']);
 
         $property->update($data);
 

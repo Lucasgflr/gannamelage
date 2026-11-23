@@ -22,15 +22,17 @@ export default function Layout({ logout }: { logout: () => Promise<void> }) {
                 </button>
             </div>
         </header>
-        <main className="workspace"><Outlet /></main>
         <nav className="navigation" aria-label="Navegação interna">
             {destinations.map(({ path, label, icon }) => {
                 const active = label === 'Buscar' ? searching :
                     label === 'Imóveis' ? !searching && pathname !== '/properties/create' : pathname === path;
-                return <Link to={path} key={path} aria-current={active ? 'page' : undefined}>
+                const searchParams = new URLSearchParams(pathname === '/' ? search : '');
+                searchParams.set('buscar', '1');
+                return <Link to={label === 'Buscar' ? `/?${searchParams}` : path} key={path} aria-current={active ? 'page' : undefined}>
                     <i className={`fa-solid fa-${icon}`} aria-hidden="true" /> {label}
                 </Link>;
             })}
         </nav>
+        <main className="workspace"><Outlet /></main>
     </div>;
 }

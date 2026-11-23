@@ -181,3 +181,16 @@ body:has(.sheet[open]) { overflow: hidden; }
     .property-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .editor-grid { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
 }
+
+.desktop-create { display: none; }
+.search-tools { display: grid; gap: .5rem; grid-template-columns: minmax(0, 1fr) auto; }
+.search-row { display: flex; min-width: 0; }
+.search-row input { border-start-start-radius: 0; border-end-start-radius: 0; }
+.search-submit { color: var(--accent); border-inline-end: 0; border-start-end-radius: 0; border-end-end-radius: 0; }
+.filter-summary { min-height: 44px; padding-block: .65rem; cursor: pointer; font-weight: 690; color: var(--accent); }
+.sort-select select { width: auto; max-width: 100%; font-size: .875rem; }
+.page-size { width: fit-content; }
+@media (min-width: 640px) {
+    .search-tools { grid-template-columns: minmax(0, 34rem) auto; justify-content: start; }
+}
+@media (min-width: 1024px) { .desktop-create { display: inline-flex; } }

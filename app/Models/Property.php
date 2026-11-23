@@ -33,12 +33,6 @@ class Property extends Model
 
     /**
      * Campos que o controller pode gravar de uma vez.
-     *
-     * Observação para manutenção: a coluna "iptu" existe no banco
-     * (migration de 2026), o formulário envia esse valor e o controller
-     * valida, mas "iptu" não está nesta lista. Por causa disso, o Laravel
-     * descarta o IPTU na gravação em massa. Para o valor passar a ser
-     * salvo, "iptu" precisa entrar aqui e também em $casts.
      */
     protected $fillable = [
         'title',
@@ -48,6 +42,7 @@ class Property extends Model
         'built_area',
         'sale_price',
         'condo_price',
+        'iptu',
         'bedrooms',
         'suites',
         'bathrooms',
@@ -72,6 +67,7 @@ class Property extends Model
     protected $casts = [
         'sale_price' => 'decimal:2',
         'condo_price' => 'decimal:2',
+        'iptu' => 'decimal:2',
         'land_area' => 'decimal:2',
         'built_area' => 'decimal:2',
     ];

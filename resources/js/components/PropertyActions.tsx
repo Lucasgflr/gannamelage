@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, errorMessage } from '../services/api';
+import { publicUrl } from '../services/share';
 import type { Property } from '../types/property';
 import ShareButton from './ShareButton';
 import Sheet from './Sheet';
@@ -41,6 +42,7 @@ export default function PropertyActions({ property, notify }: { property: Proper
     if (property.status === 'draft') options.push('publish');
     if (property.status === 'available' || property.status === 'reserved') options.push('sell');
     options.push('duplicate', 'delete');
+    const url = publicUrl(property);
     const view = `/properties/${property.id}/view`;
 
     return <div className="card-actions">
@@ -63,6 +65,7 @@ export default function PropertyActions({ property, notify }: { property: Proper
                     onClick={() => { mutation.reset(); setConfirm(undefined); }}>Cancelar</button>
             </> : <>
                 <Link className="btn" to={view}>Visualizar</Link>
+                {url && <a className="btn" href={url}>Ver página pública</a>}
                 {options.map(action => <button key={action} className={`btn ${action === 'delete' ? 'danger' : ''}`}
                     onClick={() => { mutation.reset(); setConfirm(action); }}>{labels[action]}</button>)}
             </>}

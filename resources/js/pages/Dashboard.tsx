@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { usePropertyFilters } from '../hooks/usePropertyFilters';
 import { useProperties } from '../hooks/useProperties';
 import { errorMessage } from '../services/api';
@@ -18,6 +17,9 @@ export default function Dashboard() {
     const results = useRef<HTMLDivElement>(null);
     const query = useProperties(params);
     const page = query.data;
+    const pageNumbers = page ? [...new Set([1, page.current_page - 1, page.current_page, page.current_page + 1, page.last_page])]
+        .filter(number => number >= 1 && number <= page.last_page)
+        .sort((first, second) => first - second) : [];
     const search = useCallback((value: string) => {
         update({ search: value }, true);
     }, [update]);
@@ -35,12 +37,7 @@ export default function Dashboard() {
     }
 
     return <section className="stack">
-        <header className="dashboard-heading">
-            <div><h1>Imóveis</h1><p className="muted">Painel de vendas</p></div>
-            <Link className="btn primary desktop-create" to="/properties/create">
-                <i className="fa-solid fa-plus" aria-hidden="true" /> Novo imóvel
-            </Link>
-        </header>
+        <h1>Imóveis</h1>
         <div className="panel stack search-panel">
             <div className="search-tools">
                 <SearchBar key={reset} search={params.search ?? ''} change={search} focus={searching} />
@@ -74,7 +71,9 @@ export default function Dashboard() {
         </div>}
         {page && page.last_page > 1 && <nav className="pagination" aria-label="Paginação">
             <button className="btn" disabled={page.current_page === 1} onClick={() => goToPage(page.current_page - 1)}>Anterior</button>
-            <span>Página {page.current_page} de {page.last_page}</span>
+            {pageNumbers.map(number => <button key={number} className="btn"
+                aria-label={`Página ${number}`} aria-current={number === page.current_page ? 'page' : undefined}
+                disabled={number === page.current_page} onClick={() => goToPage(number)}>{number}</button>)}
             <button className="btn" disabled={page.current_page >= page.last_page} onClick={() => goToPage(page.current_page + 1)}>Próxima</button>
         </nav>}
         <label className="page-size">Imóveis por página

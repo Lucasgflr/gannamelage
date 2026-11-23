@@ -30,6 +30,6 @@ export default function SearchBar({ search, change, focus }: {
         <label htmlFor="property-search" className="sr-only">Buscar por título, localização ou código</label>
         <button className="btn search-submit" aria-label="Executar busca"><i className="fa-solid fa-magnifying-glass" aria-hidden="true" /></button>
         <input id="property-search" ref={input} type="search" maxLength={255}
-            placeholder="Título, localização ou código" value={draft} onChange={event => setDraft(event.target.value)} />
+            placeholder="Título, bairro ou ID" value={draft} onChange={event => setDraft(event.target.value)} />
     </form>;
 }

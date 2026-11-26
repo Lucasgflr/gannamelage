@@ -1,0 +1,9 @@
+.demo-banner {
+    padding: max(.45rem, env(safe-area-inset-top)) max(.75rem, env(safe-area-inset-right)) .45rem max(.75rem, env(safe-area-inset-left));
+    background: #fff2ca;
+    color: #563d10;
+    font-size: .875rem;
+    text-align: center;
+}
+.demo-login { min-height: calc(100dvh - 3rem); }
+.demo-banner + .app-shell > .topbar { padding-top: 0; }

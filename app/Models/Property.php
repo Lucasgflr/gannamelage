@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * Representa um imóvel à venda. É o registro central do sistema.
@@ -33,21 +34,18 @@ class Property extends Model
 
     /**
      * Campos que o controller pode gravar de uma vez.
-     *
-     * Observação para manutenção: a coluna "iptu" existe no banco
-     * (migration de 2026), o formulário envia esse valor e o controller
-     * valida, mas "iptu" não está nesta lista. Por causa disso, o Laravel
-     * descarta o IPTU na gravação em massa. Para o valor passar a ser
-     * salvo, "iptu" precisa entrar aqui e também em $casts.
      */
     protected $fillable = [
         'title',
+        'title_automatic',
+        'title_suffix',
         'description',
         'property_type',
         'land_area',
         'built_area',
         'sale_price',
         'condo_price',
+        'iptu',
         'bedrooms',
         'suites',
         'bathrooms',
@@ -70,8 +68,10 @@ class Property extends Model
      * (ex.: "450000.00"), e não como texto solto.
      */
     protected $casts = [
+        'title_automatic' => 'boolean',
         'sale_price' => 'decimal:2',
         'condo_price' => 'decimal:2',
+        'iptu' => 'decimal:2',
         'land_area' => 'decimal:2',
         'built_area' => 'decimal:2',
     ];
@@ -102,6 +102,25 @@ class Property extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function reservations(): HasMany
+    {
+        return $this->hasMany(PropertyReservation::class);
+    }
+
+    public function activeReservation(): HasOne
+    {
+        return $this->hasOne(PropertyReservation::class)->active();
+    }
+
+    public function endVisitReservation(int $userId, string $reason): void
+    {
+        $this->reservations()->active()->update([
+            'released_at' => now('UTC'),
+            'released_by' => $userId,
+            'release_reason' => $reason,
+        ]);
     }
 
     /**

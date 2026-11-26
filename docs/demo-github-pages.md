@@ -38,3 +38,13 @@ A demo tem configuração e saída próprias. O build Laravel continua com `npm 
 - As fotos são ilustrativas e não representam imóveis cadastrados pela imobiliária. [Exterior](https://images.unsplash.com/photo-1600596542815-ffad4c1539a9) · [Interior](https://images.unsplash.com/photo-1600607687939-ce8a6c25118c)
 
 A imagem institucional JPEG de 1200 × 630 é incluída no build estático. A metatag Open Graph usa a URL pública dessa imagem e vale para todos os anúncios por hash.
+
+## Testar reservas na demonstração
+
+1. Abra `#/p/imovel-demo-1` na demonstração e entre pelo acesso no rodapé como **Ana Exemplo**.
+2. Reserve o imóvel e confirme. Saia e retorne ao anúncio como **Rafael Modelo** para ver a reserva da Ana e a restrição de liberação.
+3. Use **Simular próximo dia** para avançar o relógio local até a meia-noite de Brasília e testar uma nova reserva.
+
+As reservas e o relógio de teste persistem no navegador. A troca de perfil preserva as reservas. A autenticação e a concorrência são simuladas e os dados ficam no navegador, sem sincronização entre dispositivos.
+
+Capturas da demo em 390 × 844: [Localização e título](screenshots/visitas/localizacao-e-titulo.png), [Área do corretor](screenshots/visitas/area-do-corretor.png) e [Minhas reservas](screenshots/visitas/minhas-reservas.png).

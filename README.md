@@ -26,7 +26,7 @@ Use `composer run dev` ou rode `php artisan serve` e `npm run dev` em terminais 
 npm run typecheck
 npm run lint
 npm run build
-php artisan test
+DB_CONNECTION=sqlite DB_DATABASE=:memory: php artisan test
 npx playwright install chromium
 npm run test:e2e
 ```
@@ -37,7 +37,7 @@ O Playwright usa o Laravel com um arquivo SQLite e armazenamento de fotos tempor
 
 1. Em staging, compile o commit da entrega com `npm ci` e `npm run build` e instale o backend com `composer install --no-dev --optimize-autoloader`.
 2. Publique os arquivos Laravel e o diretório `public/build` da mesma compilação. Sirva `public/` como raiz web e mantenha as regras existentes de encaminhamento para `public/index.php`.
-3. Preserve a configuração do ambiente, o banco, o `APP_KEY` e o armazenamento persistente de fotos. Confira se `public/storage` aponta para o armazenamento correto. A entrega usa o esquema existente, incluindo a migração de IPTU que já faz parte do projeto.
+3. Preserve a configuração do ambiente, o banco, o `APP_KEY` e o armazenamento persistente de fotos. Confira se `public/storage` aponta para o armazenamento correto. Em homologação, aplique as migrações de IPTU, título automático e reservas de visita antes de validar o painel.
 4. Em staging, confira o login, a listagem, a edição e uma URL pública existente. Se precisar reverter a entrega, restaure os arquivos da revisão anterior junto com seus assets compilados e mantenha o armazenamento persistente.
 
 [Documentação do frontend](docs/frontend.md) · [Documentação da API](docs/backend.md) · [Relatório da entrega React](docs/entrega-react-mobile.md)

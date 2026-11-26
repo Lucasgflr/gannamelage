@@ -40,3 +40,11 @@ Os filtros consultam as cidades cadastradas ao abrir a folha de filtros ou ao ca
 O valor de venda e os limites de preço usam R$ mil na interface. Digite `650,5` para R$ 650.500,00 ou `1,5 milhão` para R$ 1.500.000,00. O ponto separa grupos de milhares e a vírgula marca decimais. O formulário mostra o valor em reais antes de salvar. Payloads e URLs continuam em reais. Condomínio e IPTU também continuam em reais nos campos de entrada.
 
 Os componentes de compartilhamento usam o mesmo link por ambiente. Na aplicação Laravel, o HTML de `/p/:slug` inclui título, preço, resumo e metadados JPEG, PNG ou de outro formato reconhecido para a foto principal disponível. A primeira foto disponível e a imagem institucional são alternativas, nessa ordem. A foto original mantém suas dimensões e marca d’água. Na demonstração, todos os links por hash usam o mesmo HTML com a imagem institucional.
+
+## Localização, títulos e visitas
+
+Cadastro novo começa em Minas Gerais, São Lourenço. O catálogo local foi extraído da [API de municípios do IBGE](https://servicodados.ibge.gov.br/api/v1/localidades/municipios) em 26/11/2026 e fica em `resources/js/utils/municipalities.json`. As cidades cadastradas têm prioridade. O autocomplete de bairro permite gravar um novo nome e reaproveita sugestões da mesma cidade e UF. Os filtros do painel usam as localidades cadastradas.
+
+O título automático usa tipo e bairro em São Lourenço/MG ou tipo e município nas demais localidades. O corretor pode complementar o título ou editá-lo manualmente. Títulos anteriores começam em modo manual e o slug dos anúncios existentes permanece estável.
+
+A mesma URL pública permite entrar como corretor e voltar ao anúncio. A Área do corretor carrega os dados autenticados separadamente. O painel combina filtros de visitas e comerciais e oferece as mesmas ações de reserva no menu do card.

@@ -240,8 +240,22 @@ Arquivo de arranque do Laravel 12. Aponta as rotas e liga o Sanctum no modo que 
 
 ## Opções de localização e prévias de links
 
-`GET /api/properties/filter-options` exige Sanctum e retorna `{ cities: [{ name, neighborhoods }] }`. A consulta lê apenas os pares distintos de cidade e bairro. A resposta normaliza espaços e capitalização para deduplicar e mantém os dados cadastrados. A listagem mantém `address_city` e `address_neighborhood`. Com `location_exact=1`, os valores são comparados como opções completas com normalização de espaços e caixa.
+`GET /api/properties/filter-options` exige Sanctum e retorna `{ cities: [{ name, neighborhoods }] }`. A consulta lê combinações distintas de UF, cidade e bairro. A resposta normaliza espaços e capitalização para deduplicar e mantém os dados cadastrados. A listagem mantém `address_city` e `address_neighborhood`. Com `location_exact=1`, os valores são comparados como opções completas com normalização de espaços e caixa.
 
 A rota `/p/{slug}` devolve metadados Open Graph no HTML, com URL canônica, preço e resumo. A imagem segue a ordem de prioridade da foto principal, das demais fotos disponíveis e de `public/images/og-institucional.jpg`. São informados o MIME e as dimensões reais do arquivo. A troca da foto principal por upload gera um novo caminho. O WhatsApp mantém cache próprio da página e da miniatura.
 
 Ao publicar em staging, confirme o HTTPS do anúncio e os retornos HTTP da URL presente em `og:image`, incluindo o acesso a `public/storage` sem autenticação. Inclua `public/images/og-institucional.jpg` no pacote publicado.
+
+## Área do corretor e reservas de visita
+
+O catálogo autenticado `GET /api/properties/filter-options` inclui `states` (UF, cidades e bairros do cadastro). O campo `cities` continua disponível para URLs antigas sem UF. A listagem aceita `address_state` e `visit=free|reserved|mine`, além dos filtros comerciais e de localização existentes. Para cada imóvel, `active_reservation` é nulo ou contém `id`, `broker`, `reserved_at`, `expires_at` e `mine`, calculado para a conta autenticada.
+
+| Método e caminho | Comportamento |
+| --- | --- |
+| `GET /api/properties/{id}/internal` | Retorna proprietário, endereço completo, situação comercial e reserva ativa para a equipe autenticada. A resposta usa `Cache-Control: private, no-store`. |
+| `POST /api/properties/{id}/reserve` | Usa a conta da sessão. Retorna 201 quando cria a reserva e 409 quando o imóvel está indisponível ou a reserva já existe. |
+| `POST /api/properties/{id}/release-reservation` | Recebe `reservation_id`. Retorna 200 ao liberar, 403 para outro corretor ou 409 se a reserva já mudou. |
+
+As contas internas são provisionadas fora do aplicativo. O esquema atual tem um único perfil interno. Somente o corretor responsável pode liberar sua reserva. Os tokens Sanctum expiram por padrão após 1.440 minutos, configuráveis por `SANCTUM_EXPIRATION_MINUTES`. A API pública envia uma lista explícita de campos e mantém a localização no nível de bairro, cidade e UF.
+
+A migração `2026_11_26_000001_add_title_mode_and_create_property_reservations.php` acrescenta o modo e o complemento de título aos imóveis existentes e cria a tabela `property_reservations`. As reservas usam datas UTC, com expiração na próxima meia-noite em `America/Sao_Paulo`. Consultas excluem reservas expiradas, mesmo sem agendamento. A liberação, a mudança para situação comercial indisponível e a exclusão encerram a reserva ativa com motivo registrado. O histórico conserva o slug do imóvel e o nome do corretor caso seus cadastros sejam removidos. Operações concorrentes coordenam a alteração pela linha do imóvel no MySQL e por transações `IMMEDIATE` no SQLite.

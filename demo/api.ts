@@ -2,23 +2,24 @@ import axios, { AxiosError, type AxiosResponse, type InternalAxiosRequestConfig 
 import { blankProperty, illustrativePhoto, sampleProperties } from './fixtures';
 import type { Photo, Property, PropertyPage } from '../resources/js/types/property';
 
-import { cleanLocation, locationKey } from '../resources/js/utils/location';
+import { activeReservation, profiles, release, reserve, sessionKey } from './reservations';
+import { cleanLocation, locationKey, searchLocationKey } from '../resources/js/utils/location';
 
-function locationOptions(properties: Property[]) {
+function citiesIn(properties: Property[], keyOf = locationKey) {
     const cities = new Map<string, { name: string; neighborhoods: Map<string, string> }>();
     for (const property of properties) {
         const name = cleanLocation(property.address_city);
         if (!name) continue;
-        const key = locationKey(name);
+        const key = keyOf(name);
         const city = cities.get(key) ?? { name, neighborhoods: new Map<string, string>() };
         const neighborhood = cleanLocation(property.address_neighborhood);
-        const neighborhoodKey = locationKey(neighborhood);
+        const neighborhoodKey = keyOf(neighborhood);
         if (neighborhood && !city.neighborhoods.has(neighborhoodKey)) city.neighborhoods.set(neighborhoodKey, neighborhood);
         cities.set(key, city);
     }
     const compare = (a: string, b: string) => a.localeCompare(b, 'pt-BR');
-    return { cities: [...cities.values()].sort((a, b) => compare(a.name, b.name))
-        .map(city => ({ name: city.name, neighborhoods: [...city.neighborhoods.values()].sort(compare) })) };
+    return [...cities.values()].sort((a, b) => compare(a.name, b.name))
+        .map(city => ({ name: city.name, neighborhoods: [...city.neighborhoods.values()].sort(compare) }));
 }
 
 const storageKey = 'gannamelage-demo:v1:properties';
@@ -54,22 +55,30 @@ function write(properties: Property[], lastId: number) {
 
 const normalize = (text: string) => text.toLocaleLowerCase('pt-BR').normalize('NFD').replace(/\p{Diacritic}/gu, '').trim();
 
-function list(properties: Property[], params: Record<string, string>): PropertyPage {
+function list(properties: Property[], params: Record<string, string>, profile: string): PropertyPage {
     const search = normalize(params.search ?? '');
     const code = search.match(/^(?:#\s*|(?:id|codigo|cod\.?)\s*:?\s*)?(\d+)$/)?.[1];
     const minimums = ['bedrooms', 'suites', 'bathrooms', 'garage_spots'] as const;
     const amounts = { price: 'sale_price', built_area: 'built_area', land_area: 'land_area', condo_price: 'condo_price', iptu: 'iptu' } as const;
 
-    const rows = properties.filter(property => {
+    const rows = properties.map(property => ({
+        ...property, active_reservation: activeReservation(property.id, profile),
+    })).filter(property => {
+        const reservation = property.active_reservation;
+        if (params.visit === 'free' && (property.status !== 'available' || reservation)) return false;
+        if (params.visit === 'reserved' && !reservation) return false;
+        if (params.visit === 'mine' && !reservation?.mine) return false;
+        if (params.address_state && property.address_state?.toUpperCase() !== params.address_state.toUpperCase()) return false;
         if (params.status && params.status !== property.status) return false;
         if (params.property_type && params.property_type !== property.property_type) return false;
         if (search && !(code ? Number(code) === property.id : [
             property.title, property.description, property.address_city, property.address_neighborhood, property.slug,
         ].some(value => value && normalize(value).includes(search)))) return false;
+        const keyOf = params.address_state ? searchLocationKey : locationKey;
         for (const field of ['address_city', 'address_neighborhood'] as const) {
             if (!params[field]) continue;
             const matches = params.location_exact === '1'
-                ? locationKey(property[field]) === locationKey(params[field])
+                ? keyOf(property[field]) === keyOf(params[field])
                 : normalize(property[field] ?? '').includes(normalize(params[field]));
             if (!matches) return false;
         }
@@ -117,38 +126,77 @@ export const api = axios.create({
     adapter: async config => {
         const url = config.url ?? '';
         const method = config.method;
+        const profile = sessionStorage.getItem(sessionKey) ?? '';
         const { properties: rows, lastId } = read();
         const nextId = lastId + 1;
         const respond = (data: unknown, status = 200): AxiosResponse => ({ data, status, statusText: '', headers: {}, config });
         const save = (property: Property, status = 200) => {
+            const reservation = activeReservation(property.id, profile);
+            if (property.status !== 'available' && reservation) release(reservation.id, profile, 'commercial_status');
             write([...rows.filter(row => row.id !== property.id), property], Math.max(lastId, property.id));
             return respond(property, status);
         };
-        const notFound = () => {
-            const message = 'Imóvel demonstrativo não encontrado.';
-            return new AxiosError(message, AxiosError.ERR_BAD_REQUEST, config, undefined, respond({ message }, 404));
-        };
+        const fail = (message: string, status: number, data = {}) =>
+            new AxiosError(message, AxiosError.ERR_BAD_REQUEST, config, undefined, respond({ message, ...data }, status));
+        const notFound = () => fail('Imóvel demonstrativo não encontrado.', 404);
 
         if (url.startsWith('/api/public/properties/') && method === 'get') {
             const slug = decodeURIComponent(url.split('/').at(-1) ?? '');
             const property = rows.find(row => row.slug === slug && row.status !== 'draft');
             if (!property) throw notFound();
-            return respond({ ...property, owner: undefined });
+            return respond({
+                id: property.id, slug: property.slug, title: property.title, description: property.description,
+                property_type: property.property_type, status: property.status, sale_price: property.sale_price,
+                condo_price: property.condo_price, iptu: property.iptu, bedrooms: property.bedrooms,
+                suites: property.suites, bathrooms: property.bathrooms, garage_spots: property.garage_spots,
+                land_area: property.land_area, built_area: property.built_area, photos: property.photos,
+                address_neighborhood: property.address_neighborhood, address_city: property.address_city, address_state: property.address_state,
+            });
         }
-        if (url === '/api/properties/filter-options' && method === 'get') return respond(locationOptions(rows));
+        if (!profiles.includes(profile)) throw fail('Entre com um perfil demonstrativo.', 401);
+        if (url === '/api/properties/filter-options' && method === 'get') {
+            const states = [...new Set(rows.flatMap(row => row.address_state ? [row.address_state.toUpperCase()] : []))]
+                .sort().map(uf => ({ uf, cities: citiesIn(rows.filter(row => row.address_state?.toUpperCase() === uf), searchLocationKey) }));
+            return respond({ cities: citiesIn(rows), states });
+        }
         if (url === '/api/properties') {
-            if (method === 'get') return respond(list(rows, config.params ?? {}));
+            if (method === 'get') return respond(list(rows, config.params ?? {}, profile));
             if (method === 'post') return save(patchProperty(blankProperty(nextId), config), 201);
         }
 
-        const route = url.match(/^\/api\/properties\/(\d+)(?:\/(sell|duplicate|photos)(?:\/(\d+))?)?$/);
+        const route = url.match(/^\/api\/properties\/(\d+)(?:\/(sell|duplicate|photos|internal|reserve|release-reservation)(?:\/(\d+))?)?$/);
         const property = rows.find(row => row.id === Number(route?.[1]));
         if (!property || !route) throw notFound();
         const [, , action, photoId] = route;
 
+        const reservation = activeReservation(property.id, profile);
+        if (action === 'internal' && method === 'get') return respond({
+            owner: property.owner ?? null, status: property.status, active_reservation: reservation,
+            address: [property.address_street, property.address_number, property.address_complement,
+                property.address_neighborhood, property.address_city, property.address_state, property.address_zip].filter(Boolean).join(', '),
+        });
+        if (action === 'reserve' && method === 'post') {
+            if (property.status !== 'available') throw fail('Este imóvel não está disponível para visitas.', 409);
+            if (reservation) throw fail(reservation.mine ? 'Você já possui uma reserva ativa para este imóvel.'
+                : `Este imóvel já está reservado pelo corretor ${reservation.broker} até o final do dia.`, 409, { active_reservation: reservation });
+            return respond({
+                message: 'Imóvel reservado com sucesso até o final do dia.',
+                active_reservation: reserve(property.id, profile),
+            }, 201);
+        }
+        if (action === 'release-reservation' && method === 'post') {
+            if (!reservation || reservation.id !== JSON.parse(config.data ?? '{}').reservation_id) {
+                throw fail('A reserva mudou. Consulte a disponibilidade atual do imóvel.', 409);
+            }
+            if (!reservation.mine) throw fail('Somente o corretor responsável pode liberar este imóvel.', 403);
+            release(reservation.id, profile, 'manual');
+            return respond({ message: 'Imóvel liberado para visitas.', active_reservation: null });
+        }
+
         if (!action && method === 'get') return respond(property);
         if (!action && method === 'put') return save(patchProperty(property, config));
         if (!action && method === 'delete') {
+            if (reservation) release(reservation.id, profile, 'deleted');
             write(rows.filter(row => row.id !== property.id), lastId);
             return respond({ message: 'Imóvel removido da demonstração.' });
         }

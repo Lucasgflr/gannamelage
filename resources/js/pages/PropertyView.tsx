@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import PropertyDetails from '../components/PropertyDetails';
 import { useProperty } from '../hooks/useProperty';
 
-export function PropertyRoute({ isPublic }: { isPublic: boolean }) {
+export function PropertyRoute({ isPublic, authenticated = false }: { isPublic: boolean; authenticated?: boolean }) {
     const { id, slug } = useParams();
     const query = useProperty(isPublic ? slug : id, isPublic);
     if (query.isPending) return <p className="workspace" role="status">Carregando imóvel…</p>;
@@ -15,7 +15,7 @@ export function PropertyRoute({ isPublic }: { isPublic: boolean }) {
             {!isPublic && <Link to="/">Voltar</Link>}
         </div>;
     }
-    return <PropertyDetails key={query.data.id} property={query.data} isPublic={isPublic} />;
+    return <PropertyDetails key={query.data.id} property={query.data} isPublic={isPublic} authenticated={authenticated} />;
 }
 
 export default function PropertyView() {

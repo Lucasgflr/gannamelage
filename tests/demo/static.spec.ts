@@ -88,10 +88,12 @@ test('cadastro e edição locais, publicação simulada e anúncio público por 
     await page.goto('./');
     await enter(page);
     await page.getByRole('link', { name: 'Cadastrar', exact: true }).click();
+    await page.getByRole('button', { name: 'Editar título manualmente' }).click();
     await page.getByLabel('Título do imóvel').fill('Imóvel inventado pelo teste');
     await page.getByLabel('Valor de venda (R$ mil)').fill('650,5');
-    await page.getByLabel('Cidade', { exact: true }).fill('Cidade Nova Fictícia');
-    await page.getByLabel('Bairro', { exact: true }).fill('Bairro Novo Fictício');
+    await page.getByRole('combobox', { name: 'Cidade', exact: true }).fill('Caxambu');
+    await page.getByRole('option', { name: 'Caxambu', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Bairro', exact: true }).fill('Bairro Novo Fictício');
     await page.getByRole('button', { name: 'Fotos', exact: true }).click();
     await page.getByLabel('Foto principal', { exact: true }).setInputFiles({
         name: 'foto-ficticia.png',
@@ -109,7 +111,7 @@ test('cadastro e edição locais, publicação simulada e anúncio público por 
     await expect(sheet.getByText('Selecione uma cidade primeiro')).toBeVisible();
     const city = sheet.getByRole('combobox', { name: 'Cidade', exact: true });
     const neighborhood = sheet.getByRole('combobox', { name: 'Bairro', exact: true });
-    await city.selectOption('Cidade Nova Fictícia');
+    await city.selectOption('Caxambu');
     await neighborhood.selectOption('Bairro Novo Fictício');
     await city.selectOption('Vila Exemplo');
     await expect(neighborhood).toHaveValue('');
@@ -152,4 +154,82 @@ test('a miniatura geral está no HTML estático', async ({ page }) => {
     const image = await page.request.get('./og-institucional.jpg');
     expect(image.ok()).toBe(true);
     expect(image.headers()['content-type']).toContain('image/jpeg');
+});
+
+test('catálogo local e título automático com complemento persistente', async ({ page }) => {
+    await page.goto('./');
+    await enter(page);
+    await page.getByRole('link', { name: 'Cadastrar', exact: true }).click();
+    await expect(page.getByRole('combobox', { name: 'Estado', exact: true })).toHaveValue(/MG/);
+    await expect(page.getByRole('combobox', { name: 'Cidade', exact: true })).toHaveValue('São Lourenço');
+    const preview = page.locator('fieldset').getByText('Título do imóvel', { exact: true }).locator('..');
+    const neighborhood = page.getByRole('combobox', { name: 'Bairro', exact: true });
+    const type = page.getByRole('combobox', { name: 'Tipo do imóvel' });
+    await expect(preview).toContainText('Casa em São Lourenço');
+    await neighborhood.fill('Centro');
+    await expect(preview).toContainText('Casa no Centro');
+    await type.selectOption('apartamento');
+    await neighborhood.fill('Federal');
+    await expect(preview).toContainText('Apartamento no Federal');
+    const city = page.getByRole('combobox', { name: 'Cidade', exact: true });
+    await city.fill('Caxambu');
+    await page.getByRole('option', { name: 'Caxambu', exact: true }).click();
+    await expect(neighborhood).toHaveValue('');
+    await type.selectOption('casa');
+    await expect(preview).toContainText('Casa em Caxambu');
+    await city.fill('sao lourenco');
+    await page.getByRole('option', { name: 'São Lourenço', exact: true }).click();
+    await neighborhood.fill('Vila Nova');
+    await page.getByLabel('Complemento do título').fill('com piscina');
+    await expect(page.getByText('Casa na Vila Nova com piscina', { exact: false }).first()).toBeVisible();
+
+    const state = page.getByRole('combobox', { name: 'Estado', exact: true });
+    await state.fill('rio de janeiro');
+    await state.press('ArrowDown');
+    await state.press('Enter');
+    await expect(city).toHaveValue('');
+    await expect(neighborhood).toBeDisabled();
+    await city.fill('petropolis');
+    await page.getByRole('option', { name: 'Petrópolis', exact: true }).click();
+    await expect(page.getByText('Casa em Petrópolis com piscina', { exact: false }).first()).toBeVisible();
+    await page.getByLabel('Valor de venda (R$ mil)').fill('650');
+    await page.getByRole('button', { name: 'Salvar imóvel' }).click();
+    const created = page.getByRole('article').filter({ hasText: 'Casa em Petrópolis com piscina' });
+    await created.getByRole('link', { name: 'Editar' }).click();
+    await expect(page.getByLabel('Complemento do título')).toHaveValue('com piscina');
+});
+
+test('área privada, perfis, filtros, liberação e expiração das visitas', async ({ page }) => {
+    await page.goto('#/p/imovel-demo-1');
+    await expect(page.getByRole('heading', { name: 'Casa de demonstração no Bosque' })).toBeVisible();
+    const brokerArea = page.getByRole('heading', { name: 'Área do corretor' });
+    await expect(brokerArea).toHaveCount(0);
+    await page.getByRole('link', { name: 'Acesso para corretores' }).click();
+    await enter(page);
+    await expect(page).toHaveURL(/#\/p\/imovel-demo-1$/);
+    await expect(brokerArea).toBeVisible();
+    const reserve = page.getByRole('button', { name: 'RESERVAR', exact: true });
+    await reserve.click();
+    await page.getByRole('button', { name: 'Confirmar', exact: true }).click();
+    await expect(page.getByText('Imóvel reservado com sucesso até o final do dia.')).toBeVisible();
+    await page.goto('#/?visit=mine');
+    await expect(page.getByRole('article')).toHaveCount(1);
+    await expect(page.getByRole('article').first()).toContainText('Reservado por você');
+
+    await page.goto('#/p/imovel-demo-1');
+    await page.getByRole('button', { name: 'Sair da área do corretor' }).click();
+    await expect(brokerArea).toHaveCount(0);
+    await page.getByRole('link', { name: 'Acesso para corretores' }).click();
+    await page.getByRole('combobox', { name: 'Perfil fictício' }).selectOption('Rafael Modelo');
+    await enter(page);
+    await expect(page.getByText('Reservado por Ana Exemplo')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Liberar imóvel' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Simular próximo dia' }).click();
+    await expect(reserve).toBeVisible();
+    await reserve.click();
+    await page.getByRole('button', { name: 'Confirmar', exact: true }).click();
+    await page.getByRole('button', { name: 'Liberar imóvel' }).click();
+    await page.getByRole('button', { name: 'Confirmar', exact: true }).click();
+    await expect(page.getByText('Imóvel liberado para visitas.')).toBeVisible();
+    await expect(reserve).toBeVisible();
 });

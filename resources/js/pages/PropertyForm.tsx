@@ -7,14 +7,18 @@ import { publicUrl } from '../services/share';
 import { coverPhoto, money, photoUrl, propertyTypes, statuses, type Photo, type Property } from '../types/property';
 import ShareButton from '../components/ShareButton';
 import Sheet from '../components/Sheet';
+import LocationAutocomplete from '../components/LocationAutocomplete';
+import { useLocationOptions } from '../hooks/useLocationOptions';
+import municipalities from '../utils/municipalities.json';
+import { cleanLocation, searchLocationKey } from '../utils/location';
+import { propertyTitle } from '../utils/propertyTitle';
 import PriceThousandsField from '../components/PriceThousandsField';
 import { parsePriceThousands, reaisToThousands } from '../utils/price';
 
 const tabs = ['Imóvel', 'Proprietário', 'Fotos', 'Link'] as const;
 const address = [
     ['address_street', 'Rua', 255], ['address_number', 'Número', 20],
-    ['address_complement', 'Complemento', 255], ['address_neighborhood', 'Bairro', 255],
-    ['address_city', 'Cidade', 255], ['address_state', 'UF', 2], ['address_zip', 'CEP', 10],
+    ['address_complement', 'Complemento', 255], ['address_zip', 'CEP', 10],
 ] as const;
 const numbers = [
     ['condo_price', 'Condomínio', '0.01'],
@@ -30,8 +34,25 @@ function Editor({ property }: { property?: Property }) {
     const client = useQueryClient();
     const [saved, setSaved] = useState(property);
     const [tab, setTab] = useState<(typeof tabs)[number]>('Imóvel');
-    const [title, setTitle] = useState(property?.title ?? '');
+    const [manualTitle, setManualTitle] = useState(property?.title ?? '');
+    const [automatic, setAutomatic] = useState(property ? Boolean(property.title_automatic) : true);
+    const [suffix, setSuffix] = useState(property?.title_suffix ?? '');
+    const [state, setState] = useState(property ? property.address_state ?? '' : 'MG');
+    const [city, setCity] = useState(property ? property.address_city ?? '' : 'São Lourenço');
+    const [neighborhood, setNeighborhood] = useState(property?.address_neighborhood ?? '');
+    const locations = useLocationOptions(true).data?.states ?? [];
+    const registered = locations.find(option => option.uf === state)?.cities ?? [];
+    const neighborhoods = registered.find(option => searchLocationKey(option.name) === searchLocationKey(city))?.neighborhoods ?? [];
+    const reference = municipalities as Record<string, { name: string; cities: string[] }>;
+    const registeredKeys = new Set(registered.map(option => searchLocationKey(option.name)));
+    const cities = [
+        ...registered.map(option => option.name),
+        ...(reference[state]?.cities ?? []).filter(name => !registeredKeys.has(searchLocationKey(name))),
+    ];
     const [type, setType] = useState(property?.property_type ?? 'casa');
+    const neighborhoodName = neighborhoods.find(name => searchLocationKey(name) === searchLocationKey(neighborhood))
+        ?? cleanLocation(neighborhood);
+    const title = automatic ? propertyTitle(type, state, city, neighborhoodName, suffix) : manualTitle;
     const [price, setPrice] = useState(reaisToThousands(property?.sale_price));
     const salePrice = parsePriceThousands(price);
     const [photos, setPhotos] = useState(property?.photos ?? []);
@@ -74,13 +95,18 @@ function Editor({ property }: { property?: Property }) {
         event.preventDefault();
         if (busy) return;
         const fields = new FormData(event.currentTarget);
-        if (!title.trim() || salePrice === null || Number(salePrice) <= 0) {
+        if (!title.trim() || title.trim().length > 255 || salePrice === null || Number(salePrice) <= 0) {
             setTab('Imóvel');
-            setError('Informe o título e um valor de venda válido em R$ mil, maior que zero.');
+            setError(!title.trim() || title.trim().length > 255
+                ? 'Informe um título de até 255 caracteres.'
+                : 'Informe um valor de venda válido em R$ mil, maior que zero.');
             return;
         }
         const data = {
-            title: title.trim(), sale_price: salePrice, property_type: type, description: fields.get('description'),
+            title: title.trim(), title_automatic: automatic, title_suffix: automatic ? suffix.trim() : null,
+            address_state: state || null, address_city: city || null,
+            address_neighborhood: neighborhoodName || null,
+            sale_price: salePrice, property_type: type, description: fields.get('description'),
             ...Object.fromEntries(address.map(([key]) => [key, String(fields.get(key) ?? '').trim() || null])),
             ...Object.fromEntries(numbers.map(([key, , step]) => {
                 const value = fields.get(key);
@@ -116,6 +142,7 @@ function Editor({ property }: { property?: Property }) {
                 client.invalidateQueries({ queryKey: ['properties'] }),
                 client.invalidateQueries({ queryKey: ['property', String(savedId.current)] }),
                 client.invalidateQueries({ queryKey: ['public-property'] }),
+                client.invalidateQueries({ queryKey: ['property-internal'] }),
             ]);
             setBusy(false);
         }
@@ -131,6 +158,7 @@ function Editor({ property }: { property?: Property }) {
                 client.invalidateQueries({ queryKey: ['properties'] }),
                 client.invalidateQueries({ queryKey: ['property', String(savedId.current)] }),
                 client.invalidateQueries({ queryKey: ['public-property'] }),
+                client.invalidateQueries({ queryKey: ['property-internal'] }),
             ]);
         } catch (failure) {
             setError(errorMessage(failure, 'Não foi possível remover a foto.'));
@@ -152,11 +180,26 @@ function Editor({ property }: { property?: Property }) {
                     {tabs.map(label => <button type="button" className="btn" aria-pressed={label === tab} key={label} onClick={() => setTab(label)}>{label}</button>)}
                 </div>
                 <fieldset className="stack" hidden={tab !== 'Imóvel'} disabled={busy}>
-                    <label>Título do imóvel<input value={title} onChange={event => setTitle(event.target.value)} required maxLength={255} /></label>
                     <label>Tipo do imóvel<select value={type} onChange={event => setType(event.target.value)}>
                         {!Object.hasOwn(propertyTypes, type) && <option value={type}>{type}</option>}
                         {Object.entries(propertyTypes).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
                     </select></label>
+                    <div className="location-fields">
+                        <LocationAutocomplete label="Estado" value={state} options={Object.entries(reference).map(([uf, item]) => ({ value: uf, label: `${uf} — ${item.name}` }))}
+                            change={value => { if (value !== state) { setState(value); setCity(''); setNeighborhood(''); } }} />
+                        <LocationAutocomplete label="Cidade" value={city} options={cities.map(value => ({ value }))} disabled={!state}
+                            change={value => { if (value !== city) { setCity(value); setNeighborhood(''); } }} />
+                        <LocationAutocomplete label="Bairro" value={neighborhood} options={neighborhoods.map(value => ({ value }))}
+                            disabled={!city} custom change={setNeighborhood} />
+                    </div>
+                    {automatic ? <>
+                        <label>Complemento do título<input value={suffix} onChange={event => setSuffix(event.target.value)} maxLength={255} /></label>
+                        <p><strong>Título do imóvel</strong> {title}</p>
+                        <button className="btn" type="button" onClick={() => { setManualTitle(title); setAutomatic(false); }}>Editar título manualmente</button>
+                    </> : <>
+                        <label>Título do imóvel<input value={manualTitle} onChange={event => setManualTitle(event.target.value)} maxLength={255} /></label>
+                        <button className="btn" type="button" onClick={() => setAutomatic(true)}>Gerar título automático</button>
+                    </>}
                     <label>Descrição<textarea name="description" rows={4} defaultValue={property?.description ?? ''} /></label>
                     <div className="field-grid">
                         <PriceThousandsField label="Valor de venda" value={price} change={setPrice} required />
@@ -166,8 +209,7 @@ function Editor({ property }: { property?: Property }) {
                     </div>
                     <h2>Endereço</h2>
                     <div className="field-grid">{address.map(([key, label, max]) => <label key={key}>{label}
-                        <input name={key} maxLength={max} defaultValue={property?.[key] ?? ''} onChange={key === 'address_state'
-                            ? event => { event.currentTarget.value = event.currentTarget.value.toUpperCase(); } : undefined} />
+                        <input name={key} maxLength={max} defaultValue={property?.[key] ?? ''} />
                     </label>)}</div>
                 </fieldset>
                 <fieldset className="stack" hidden={tab !== 'Proprietário'} disabled={busy}>

@@ -65,7 +65,7 @@ export default function FilterSheet({ params, close, apply, locations }: {
     return <Sheet title="Filtrar imóveis" close={close} footer={<button className="btn primary" form={formId}>Aplicar filtros</button>}>
         <form id={formId} className="stack" onSubmit={submit}>
             <div className="field-grid">
-                {locations.data ? <LocationFilters cities={locations.data} initialCity={params.address_city}
+                {locations.data ? <LocationFilters cities={locations.data.cities} states={locations.data.states} initialState={params.address_state} initialCity={params.address_city}
                     initialNeighborhood={params.address_neighborhood} /> :
                     <div style={{ gridColumn: '1 / -1' }}>
                         {locations.isError ? <>

@@ -63,8 +63,12 @@ test('busca com debounce, título, localização, código e estado vazio', async
         if (url.pathname === '/api/properties' && search) requests.push(search);
     });
     const input = page.getByLabel(searchLabel);
+    await page.clock.install();
+    await page.clock.pauseAt(new Date(Date.now() + 1000));
     await input.fill('Casa');
     await input.fill('Casa Jardim 0');
+    await page.clock.runFor(400);
+    await page.clock.resume();
     await expect(page.getByRole('status').filter({ hasText: '1 imóvel encontrado' })).toBeVisible();
     expect(requests).toEqual(['Casa Jardim 0']);
     await input.fill('Santa Lúcia');
@@ -148,7 +152,8 @@ test('criação, foto multipart, edição, publicação, compartilhamento e excl
     await login(page);
     await page.getByRole('navigation', { name: 'Navegação interna' }).getByRole('link', { name: 'Cadastrar' }).click();
     await page.getByRole('button', { name: 'Salvar imóvel' }).click();
-    await expect(page.getByRole('alert')).toContainText('Informe o título');
+    await expect(page.getByRole('alert')).toContainText('Informe um valor de venda');
+    await page.getByRole('button', { name: 'Editar título manualmente' }).click();
     await page.getByLabel('Título do imóvel').fill(title);
     await page.getByLabel('Valor de venda (R$ mil)').fill('620,5');
     await page.getByLabel('IPTU anual').fill('875');
@@ -323,7 +328,7 @@ test('duplica com novo slug, vende e mantém o anúncio público existente', asy
     await expect(page.getByRole('button', { name: 'Vender', exact: true })).toHaveCount(0);
     await page.getByRole('link', { name: 'Ver página pública' }).click();
     await expect(page.getByRole('heading', { name: title })).toBeVisible();
-    await expect(page.getByText('Vendido', { exact: true })).toBeVisible();
+    await expect(page.locator('.status.sold')).toHaveText('Vendido');
     const fallback = new URL('/images/og-institucional.jpg', page.url()).href;
     const html = await (await page.request.get(page.url())).text();
     expect(html).toContain(`property="og:image" content="${fallback}"`);
@@ -333,4 +338,56 @@ test('duplica com novo slug, vende e mantém o anúncio público existente', asy
     for (const id of [copy.id, original.id]) {
         expect((await page.request.delete(`/api/properties/${id}`, { headers })).ok()).toBe(true);
     }
+});
+
+test('link público volta após login e recupera falha de rede ao reservar', async ({ page }, info) => {
+    const session = await page.request.post('/api/login', { data: { email, password } });
+    const { token } = await session.json();
+    const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json' };
+    const response = await page.request.post('/api/properties', {
+        headers, data: { title: `Visita em teste ${info.project.name}`, property_type: 'casa', status: 'available', sale_price: 300000 },
+    });
+    expect(response.status()).toBe(201);
+    const property = await response.json();
+    const route = `/api/properties/${property.id}/reserve`;
+    await page.goto(`/p/${property.slug}`);
+    await expect(page.getByRole('heading', { name: 'Área do corretor' })).toHaveCount(0);
+    await page.getByRole('link', { name: 'Acesso para corretores' }).click();
+    await page.getByLabel('E-mail').fill(email);
+    await page.getByLabel('Senha').fill(password);
+    await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/p/${property.slug}$`));
+    await noOverflow(page);
+    await page.route(`**${route}`, intercepted => intercepted.abort(), { times: 1 });
+    await page.getByRole('button', { name: 'RESERVAR', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirmar', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('Verifique sua conexão e tente novamente.');
+
+    const other = await page.request.post('/api/login', { data: { email: 'outro-corretor@example.test', password } });
+    const otherToken = (await other.json()).token;
+    const otherHeaders = { ...headers, Authorization: `Bearer ${otherToken}` };
+    const attempts = await Promise.all([
+        page.request.post(route, { headers }),
+        page.request.post(route, { headers: otherHeaders }),
+    ]);
+    expect(attempts.map(attempt => attempt.status()).sort()).toEqual([201, 409]);
+    if (attempts[1].status() === 201) {
+        const { active_reservation } = await attempts[1].json();
+        const release = await page.request.post(`/api/properties/${property.id}/release-reservation`, {
+            headers: otherHeaders, data: { reservation_id: active_reservation.id },
+        });
+        expect(release.status()).toBe(200);
+        expect((await page.request.post(route, { headers })).status()).toBe(201);
+    }
+    await page.reload();
+    await expect(page.getByText('Reservado por você')).toBeVisible();
+    await page.getByRole('button', { name: 'Liberar imóvel' }).click();
+    await page.getByRole('button', { name: 'Confirmar', exact: true }).click();
+    await expect(page.getByText('Imóvel liberado para visitas.')).toBeVisible();
+    await page.getByRole('button', { name: 'Sair da área do corretor' }).click();
+    await expect(page.getByRole('heading', { name: 'Área do corretor' })).toHaveCount(0);
+    expect((await page.request.get(`/api/properties/${property.id}/internal`, {
+        headers: { Accept: 'application/json' },
+    })).status()).toBe(401);
+    await page.request.delete(`/api/properties/${property.id}`, { headers });
 });

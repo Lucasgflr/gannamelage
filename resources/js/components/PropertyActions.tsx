@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, errorMessage } from '../services/api';
 import { publicUrl } from '../services/share';
 import type { Property } from '../types/property';
+import VisitAction from './VisitAction';
 import ShareButton from './ShareButton';
 import Sheet from './Sheet';
 
@@ -33,6 +34,7 @@ export default function PropertyActions({ property, notify }: { property: Proper
             }[action]);
             await Promise.all([
                 client.invalidateQueries({ queryKey: ['properties'] }),
+                client.invalidateQueries({ queryKey: ['property-internal', property.id] }),
                 client.invalidateQueries({ queryKey: ['property', String(property.id)] }),
                 client.invalidateQueries({ queryKey: ['public-property', property.slug] }),
             ]);
@@ -66,6 +68,10 @@ export default function PropertyActions({ property, notify }: { property: Proper
             </> : <>
                 <Link className="btn" to={view}>Visualizar</Link>
                 {url && <a className="btn" href={url}>Ver página pública</a>}
+                <VisitAction id={property.id} status={property.status} reservation={property.active_reservation} notify={message => {
+                    setMenu(false);
+                    notify(message);
+                }} />
                 {options.map(action => <button key={action} className={`btn ${action === 'delete' ? 'danger' : ''}`}
                     onClick={() => { mutation.reset(); setConfirm(action); }}>{labels[action]}</button>)}
             </>}

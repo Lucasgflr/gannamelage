@@ -194,3 +194,15 @@ body:has(.sheet[open]) { overflow: hidden; }
 @media (min-width: 640px) {
     .search-tools { grid-template-columns: minmax(0, 34rem) auto; justify-content: start; }
 }
+
+.location-fields { display: grid; gap: .75rem; }
+@media (min-width: 640px) {
+    .location-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.location-autocomplete { position: relative; min-width: 0; }
+.location-autocomplete input { width: 100%; }
+.location-options { position: absolute; z-index: 3; inset-inline: 0; top: 100%; max-height: 13rem; overflow-y: auto; background: Canvas; color: CanvasText; border: 1px solid #9ca3af; border-radius: .5rem; }
+.location-options[hidden] { display: none; }
+.location-options [role="option"], .location-options p { min-height: 44px; padding: .65rem; }
+.location-options [role="option"] { cursor: pointer; }
+.location-options [aria-selected="true"], .location-options [role="option"]:hover { background: #e5e7eb; color: #111827; }

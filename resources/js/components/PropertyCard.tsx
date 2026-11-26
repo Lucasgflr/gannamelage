@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { coverPhoto, locationLabel, money, photoUrl, propertyTypes, statuses, type Property } from '../types/property';
+import { visitStatus } from '../hooks/useVisitReservation';
 import PropertyActions from './PropertyActions';
 
 export default function PropertyCard({ property, notify }: { property: Property; notify: (message: string) => void }) {
@@ -14,6 +15,7 @@ export default function PropertyCard({ property, notify }: { property: Property;
             <div className="card-meta"><span>{propertyTypes[property.property_type] ?? property.property_type}</span><span>#{property.id}</span></div>
             <p className="price">{money.format(Number(property.sale_price))}</p>
             <h3>{property.title}</h3>
+            <p className="muted text-sm">{visitStatus(property.status, property.active_reservation)}</p>
             <p className="muted text-sm">{locationLabel(property) || 'Localização não informada'}</p>
             <div className="card-meta">
                 {(property.bedrooms ?? 0) > 0 && <span><i className="fa-solid fa-bed" aria-hidden="true" /> {property.bedrooms} quartos</span>}

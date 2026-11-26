@@ -21,6 +21,12 @@ $user = User::create([
     'password' => Hash::make('teste-local-2026'),
 ]);
 
+User::create([
+    'name' => 'Outro corretor de teste',
+    'email' => 'outro-corretor@example.test',
+    'password' => Hash::make('teste-local-2026'),
+]);
+
 $prices = [610000, 780000, 480000, 925000, 610000, 520000, 765000];
 foreach ($prices as $index => $price) {
     $property = Property::create([

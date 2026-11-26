@@ -8,6 +8,7 @@ use App\Support\PropertyLocations;
 use App\Models\PropertyPhoto;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -27,7 +28,7 @@ class PropertyController extends Controller
 {
     public function filterOptions()
     {
-        return response()->json(['cities' => PropertyLocations::options()]);
+        return response()->json(['cities' => PropertyLocations::options(), 'states' => PropertyLocations::states()]);
     }
 
     /**
@@ -78,6 +79,8 @@ class PropertyController extends Controller
             'search' => 'nullable|string|max:255',
             'status' => 'nullable|in:draft,available,reserved,sold',
             'property_type' => 'nullable|string|max:255',
+            'address_state' => 'nullable|string|size:2',
+            'visit' => 'nullable|in:free,reserved,mine',
             'location_exact' => 'sometimes|boolean',
             'address_city' => 'nullable|string|max:255',
             'address_neighborhood' => 'nullable|string|max:255',
@@ -97,7 +100,20 @@ class PropertyController extends Controller
         }
         $filters = $request->validate($rules);
 
-        $query = Property::with(['owner', 'photos']);
+        $query = Property::with(['owner', 'photos', 'activeReservation']);
+        $visit = $filters['visit'] ?? null;
+        if ($visit === 'free') {
+            $query->available()->whereDoesntHave('activeReservation');
+        } elseif ($visit === 'reserved' || $visit === 'mine') {
+            $query->whereHas('activeReservation', function ($reservations) use ($visit, $request) {
+                if ($visit === 'mine') {
+                    $reservations->where('user_id', $request->user()->id);
+                }
+            });
+        }
+        if (isset($filters['address_state'])) {
+            $query->whereRaw('UPPER(address_state) = ?', [strtoupper($filters['address_state'])]);
+        }
         foreach (['status', 'property_type'] as $column) {
             if (isset($filters[$column])) {
                 $query->where($column, $filters[$column]);
@@ -116,12 +132,14 @@ class PropertyController extends Controller
             }
         }
         if ($request->boolean('location_exact') && isset($filters['address_city'])) {
-            $city = PropertyLocations::key($filters['address_city']);
+            $keyOf = isset($filters['address_state']) ? PropertyLocations::matchKey(...) : PropertyLocations::key(...);
+            $city = $keyOf($filters['address_city']);
             $neighborhood = isset($filters['address_neighborhood'])
-                ? PropertyLocations::key($filters['address_neighborhood']) : null;
+                ? $keyOf($filters['address_neighborhood']) : null;
             $locations = PropertyLocations::rows()->filter(fn ($row) =>
-                PropertyLocations::key($row->address_city) === $city
-                && ($neighborhood === null || PropertyLocations::key($row->address_neighborhood) === $neighborhood));
+                $keyOf($row->address_city) === $city
+                && (!isset($filters['address_state']) || strtoupper((string) $row->address_state) === strtoupper($filters['address_state']))
+                && ($neighborhood === null || $keyOf($row->address_neighborhood) === $neighborhood));
             $query->whereIn('address_city', $locations->pluck('address_city')->unique()->values());
             if ($neighborhood !== null) {
                 $query->whereIn('address_neighborhood', $locations->pluck('address_neighborhood')->unique()->values());
@@ -161,10 +179,16 @@ class PropertyController extends Controller
 
         [$column, $direction, $idDirection] = $sorts[$filters['sort'] ?? 'recent'];
 
-        return response()->json($query->orderBy($column, $direction)
+        $page = $query->orderBy($column, $direction)
             ->orderBy('id', $idDirection)
             ->paginate($perPage)
-            ->withQueryString());
+            ->withQueryString()
+            ->through(function (Property $property) use ($request) {
+                $reservation = $property->activeReservation?->forBroker($request->user());
+                return $property->unsetRelation('activeReservation')->toArray() + ['active_reservation' => $reservation];
+            });
+
+        return response()->json($page)->header('Cache-Control', 'private, no-store');
     }
 
     private function applyTextSearch($query, string $rawSearch): void
@@ -278,6 +302,8 @@ class PropertyController extends Controller
     {
         $data = $request->validate([
             'title' => 'required|string|max:255',
+            'title_automatic' => 'sometimes|boolean',
+            'title_suffix' => 'nullable|string|max:255',
             'description' => 'nullable|string',
             'property_type' => 'required|string|max:50',
             'land_area' => 'nullable|numeric',
@@ -311,10 +337,10 @@ class PropertyController extends Controller
             unset($data['owner']);
         }
 
-        $data['slug'] = Str::slug($data['title']) . '-' . uniqid();
+        $data['slug'] = Str::limit(Str::slug($data['title']), 241, '') . '-' . uniqid();
         $data['user_id'] = $request->user()->id;
 
-        $property = Property::create($data);
+        $property = Property::create(PropertyLocations::canonicalNeighborhood($data));
         if (isset($owner)) {
             $property->owner()->associate($owner);
             $property->save();
@@ -352,6 +378,8 @@ class PropertyController extends Controller
     {
         $data = $request->validate([
             'title' => 'sometimes|string|max:255',
+            'title_automatic' => 'sometimes|boolean',
+            'title_suffix' => 'nullable|string|max:255',
             'description' => 'nullable|string',
             'property_type' => 'sometimes|string|max:50',
             'land_area' => 'nullable|numeric',
@@ -377,20 +405,26 @@ class PropertyController extends Controller
             'owner.email' => 'nullable|email|max:255',
         ]);
 
-        if (isset($data['owner']) && !empty($data['owner']['name'])) {
-            if ($property->owner) {
-                $property->owner->update($data['owner']);
-            } else {
-                $owner = \App\Models\Owner::create($data['owner']);
-                $property->owner()->associate($owner);
-                $property->save();
+        return DB::transaction(function () use ($request, $property, $data) {
+            $property = Property::lockForUpdate()->findOrFail($property->id);
+            if (isset($data['owner']) && !empty($data['owner']['name'])) {
+                if ($property->owner) {
+                    $property->owner->update($data['owner']);
+                } else {
+                    $owner = \App\Models\Owner::create($data['owner']);
+                    $property->owner()->associate($owner);
+                    $property->save();
+                }
             }
-        }
-        unset($data['owner']);
+            unset($data['owner']);
 
-        $property->update($data);
+            $property->update(PropertyLocations::canonicalNeighborhood($data, $property));
+            if ($property->status !== 'available') {
+                $property->endVisitReservation($request->user()->id, 'commercial_status');
+            }
 
-        return response()->json($property->load(['owner', 'photos']));
+            return response()->json($property->load(['owner', 'photos']));
+        }, 5);
     }
 
     /**
@@ -401,12 +435,17 @@ class PropertyController extends Controller
      * junto, por causa do cascadeOnDelete definido na migration.
      * O registro do proprietário em owners não é apagado.
      */
-    public function destroy(Property $property)
+    public function destroy(Request $request, Property $property)
     {
-        foreach ($property->photos as $photo) {
-            Storage::disk('public')->delete($photo->path);
-        }
-        $property->delete();
+        $paths = DB::transaction(function () use ($request, $property) {
+            $property = Property::lockForUpdate()->findOrFail($property->id);
+            $paths = $property->photos()->pluck('path');
+            $property->endVisitReservation($request->user()->id, 'deleted');
+            $property->delete();
+
+            return $paths;
+        }, 5);
+        Storage::disk('public')->delete($paths->all());
 
         return response()->json(['message' => 'Imóvel removido com sucesso.']);
     }
@@ -431,7 +470,7 @@ class PropertyController extends Controller
         $newProperty = $property->replicate([
             'id', 'slug', 'user_id', 'created_at', 'updated_at',
         ]);
-        $newProperty->slug = Str::slug($newProperty->title) . '-' . uniqid();
+        $newProperty->slug = Str::limit(Str::slug($newProperty->title), 241, '') . '-' . uniqid();
         $newProperty->status = 'draft';
         $newProperty->user_id = auth()->id();
         $newProperty->save();
@@ -811,11 +850,15 @@ class PropertyController extends Controller
      * O imóvel continua no painel, no filtro "Vendidas". A página pública
      * ainda abre, porque showPublic só esconde status "draft".
      */
-    public function sell(Property $property)
+    public function sell(Request $request, Property $property)
     {
-        $property->update(['status' => 'sold']);
+        return DB::transaction(function () use ($request, $property) {
+            $property = Property::lockForUpdate()->findOrFail($property->id);
+            $property->update(['status' => 'sold']);
+            $property->endVisitReservation($request->user()->id, 'commercial_status');
 
-        return response()->json($property->load(['owner', 'photos']));
+            return response()->json($property->load(['owner', 'photos']));
+        }, 5);
     }
 
     /**
@@ -833,7 +876,11 @@ class PropertyController extends Controller
             ->where('status', '!=', 'draft')
             ->firstOrFail();
 
-        return response()->json($property);
+        return response()->json($property->only([
+            'id', 'slug', 'title', 'description', 'property_type', 'status', 'sale_price',
+            'condo_price', 'iptu', 'bedrooms', 'suites', 'bathrooms', 'garage_spots',
+            'land_area', 'built_area', 'address_neighborhood', 'address_city', 'address_state', 'photos',
+        ]));
     }
 
     /**

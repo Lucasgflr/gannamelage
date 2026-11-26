@@ -1,4 +1,5 @@
 import { filterLabels, type Filter } from '../hooks/usePropertyFilters';
+import { visitFilters } from '../hooks/useVisitReservation';
 import { money, propertyTypes, statuses, type Status } from '../types/property';
 
 export default function ActiveFilters({ params, remove, clear }: {
@@ -12,6 +13,7 @@ export default function ActiveFilters({ params, remove, clear }: {
     return <div className="row wrap" aria-label="Filtros ativos" role="group">
         {active.map(key => {
             const value = key === 'status' ? statuses[params[key] as Status] ?? params[key]
+                : key === 'visit' ? visitFilters[params[key] as keyof typeof visitFilters] ?? params[key]
                 : key === 'property_type' ? propertyTypes[params[key]] ?? params[key]
                 : (key === 'min_price' || key === 'max_price') && Number.isFinite(Number(params[key]))
                     ? money.format(Number(params[key])) : params[key];

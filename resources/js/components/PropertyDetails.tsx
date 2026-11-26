@@ -4,13 +4,14 @@ import { coverPhoto, locationLabel, money, photoUrl, statuses, type Property } f
 import { publicUrl } from '../services/share';
 import ShareButton from './ShareButton';
 import Sheet from './Sheet';
+import BrokerArea from './BrokerArea';
 
 const features = [
     ['bedrooms', 'Quartos'], ['suites', 'Suítes'], ['bathrooms', 'Banheiros'], ['garage_spots', 'Vagas'],
     ['land_area', 'Terreno (m²)'], ['built_area', 'Área construída (m²)'],
 ] as const;
 
-export default function PropertyDetails({ property, isPublic }: { property: Property; isPublic: boolean }) {
+export default function PropertyDetails({ property, isPublic, authenticated }: { property: Property; isPublic: boolean; authenticated: boolean }) {
     const [photoIndex, setPhotoIndex] = useState<number | null>(null);
     const cover = coverPhoto(property);
     const photos = cover ? [cover, ...property.photos.filter(photo => photo.id !== cover.id)] : [];
@@ -51,6 +52,7 @@ export default function PropertyDetails({ property, isPublic }: { property: Prop
                 <div><dt>E-mail</dt><dd>{property.owner?.email || 'Não informado'}</dd></div>
             </dl>
         </section>}
+        {isPublic && authenticated && <BrokerArea id={property.id} />}
         {photos.length > 0 && <section><h2>Galeria de fotos</h2><div className="photo-grid">
             {photos.map((photo, index) => <button key={photo.id} onClick={() => setPhotoIndex(index)} aria-label={`Ampliar foto ${index + 1}`}>
                 <img loading="lazy" src={photoUrl(photo)} alt={`Foto ${index + 1}`} />

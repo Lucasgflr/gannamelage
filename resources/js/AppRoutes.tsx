@@ -24,7 +24,7 @@ export default function AppRoutes({ authenticated, logout, loginScreen }: {
 
     return <Suspense fallback={<p className="workspace" role="status">Carregando…</p>}>
         <Routes>
-            <Route path="/p/:slug" element={<LandingPage />} />
+            <Route path="/p/:slug" element={<LandingPage authenticated={authenticated} logout={logout} />} />
             <Route path="/login" element={authenticated ? <Navigate to={destination} replace /> : loginScreen} />
             <Route element={authenticated ? <Layout logout={logout} /> :
                 <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />}>

@@ -33,6 +33,9 @@ export interface Property {
     id: number;
     slug: string;
     title: string;
+    title_automatic?: boolean;
+    title_suffix?: string | null;
+    active_reservation?: VisitReservation | null;
     description: string | null;
     property_type: string;
     status: Status;
@@ -70,3 +73,19 @@ export const photoUrl = (photo: Photo) => photo.previewUrl ?? `/storage/${photo.
 export const coverPhoto = (property: Pick<Property, 'photos'>) => property.photos.find(photo => photo.is_main) ?? property.photos[0];
 export const locationLabel = (property: Property) =>
     [property.address_neighborhood, [property.address_city, property.address_state].filter(Boolean).join('/')].filter(Boolean).join(' · ');
+
+
+export interface VisitReservation {
+    id: number;
+    broker: string;
+    reserved_at: string;
+    expires_at: string;
+    mine: boolean;
+}
+
+export interface InternalProperty {
+    owner: Owner | null;
+    address: string;
+    status: Status;
+    active_reservation: VisitReservation | null;
+}

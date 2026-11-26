@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePropertyFilters } from '../hooks/usePropertyFilters';
 import { useLocationOptions } from '../hooks/useLocationOptions';
 import { resolveLocation } from '../components/LocationFilters';
+import { visitFilters } from '../hooks/useVisitReservation';
 import { useProperties } from '../hooks/useProperties';
 import { errorMessage } from '../services/api';
 import ActiveFilters from '../components/ActiveFilters';
@@ -17,19 +18,22 @@ export default function Dashboard() {
     const [filtersOpen, setFiltersOpen] = useState(false);
     const [reset, setReset] = useState(0);
     const results = useRef<HTMLDivElement>(null);
-    const hasLocation = Boolean(params.address_city || params.address_neighborhood);
+    const hasLocation = Boolean(params.address_state || params.address_city || params.address_neighborhood);
     const locations = useLocationOptions(filtersOpen || hasLocation);
+    const state = locations.data?.states.find(option => option.uf === params.address_state)?.uf;
+    const cities = locations.data?.states.find(option => option.uf === state)?.cities ?? locations.data?.cities;
     const location = hasLocation && locations.data
-        ? resolveLocation(locations.data, params.address_city, params.address_neighborhood) : null;
+        ? resolveLocation(cities ?? [], params.address_city, params.address_neighborhood) : null;
     const city = location?.city;
     const neighborhood = location?.neighborhood;
     const query = useProperties(params.address_city ? { ...params, location_exact: '1' } : params);
 
     useEffect(() => {
-        if (city !== undefined && ((params.address_city ?? '') !== city || (params.address_neighborhood ?? '') !== neighborhood)) {
-            update({ address_city: city, address_neighborhood: neighborhood }, true);
+        if (city !== undefined && ((params.address_city ?? '') !== city || (params.address_neighborhood ?? '') !== neighborhood
+            || (params.address_state ?? '') !== (state ?? ''))) {
+            update({ address_state: state ?? '', address_city: city, address_neighborhood: neighborhood, page: params.page ?? '' }, true);
         }
-    }, [city, neighborhood, params.address_city, params.address_neighborhood, update]);
+    }, [city, neighborhood, state, params.address_city, params.address_state, params.address_neighborhood, params.page, update]);
     const page = query.data;
     const pageNumbers = page ? [...new Set([1, page.current_page - 1, page.current_page, page.current_page + 1, page.last_page])]
         .filter(number => number >= 1 && number <= page.last_page)
@@ -62,12 +66,20 @@ export default function Dashboard() {
             <StatusTabs value={params.status ?? ''} change={status => update({ status })} />
             <ActiveFilters params={params} remove={key => {
                 if (key === 'search') setReset(value => value + 1);
-                update(key === 'address_city' ? { address_city: '', address_neighborhood: '' } : { [key]: '' });
+                if (key === 'address_state') update({ address_state: '', address_city: '', address_neighborhood: '' });
+                else if (key === 'address_city') update({ address_city: '', address_neighborhood: '' });
+                else update({ [key]: '' });
             }} clear={() => {
                 setReset(value => value + 1);
                 clear();
             }} />
         </div>
+        <label>Disponibilidade para visitas
+            <select value={params.visit ?? ''} onChange={event => update({ visit: event.target.value })}>
+                <option value="">Todos</option>
+                {Object.entries(visitFilters).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+            </select>
+        </label>
         {filtersOpen && <FilterSheet params={params} locations={locations} close={() => setFiltersOpen(false)} apply={update} />}
         {message && <p role="status" className="panel">{message}</p>}
         <div className="row spread wrap results-toolbar" ref={results} tabIndex={-1}>

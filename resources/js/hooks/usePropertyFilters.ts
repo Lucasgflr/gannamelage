@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 
 export const mainFilters = {
     property_type: 'Tipo',
+    address_state: 'Estado',
     address_city: 'Cidade',
     address_neighborhood: 'Bairro',
     min_price: 'Preço mínimo',
@@ -18,7 +19,7 @@ export const advancedFilters = {
     min_iptu: 'IPTU mínimo', max_iptu: 'IPTU máximo',
 };
 
-export const filterLabels = { search: 'Busca', status: 'Status', ...mainFilters, ...advancedFilters };
+export const filterLabels = { search: 'Busca', status: 'Status', visit: 'Visitas', ...mainFilters, ...advancedFilters };
 export type Filter = keyof typeof filterLabels;
 type Parameter = Filter | 'page' | 'sort' | 'per_page';
 
